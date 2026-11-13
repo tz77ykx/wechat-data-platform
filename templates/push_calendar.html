@@ -1,0 +1,1826 @@
+{% extends "base.html" %}
+
+{% block title %}推送日历 — 公众号管理平台{% endblock %}
+
+{% block head %}
+<style>
+        .header {
+            margin-bottom: clamp(32px, 5vw, 48px);
+            padding-bottom: clamp(16px, 3vw, 24px);
+            border-bottom: 1px solid #E0E0E0;
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .header h1 {
+            font-family: "Songti SC", "SimSun", "Noto Serif SC", serif;
+            font-size: clamp(24px, 4vw, 32px);
+            font-weight: 600;
+            color: #2D2D2D;
+            letter-spacing: 2px;
+        }
+
+        .header .subtitle {
+            font-size: clamp(12px, 1.5vw, 14px);
+            color: #6E6E6E;
+        }
+
+        .view-toggle {
+            display: flex;
+            gap: 0;
+            border: 1px solid #E0E0E0;
+        }
+
+        .view-btn {
+            font-size: 13px;
+            padding: 6px 16px;
+            border: none;
+            background: transparent;
+            color: #6E6E6E;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .view-btn:hover {
+            background: rgba(0,0,0,0.03);
+        }
+
+        .view-btn.active {
+            background: #2D2D2D;
+            color: #FFFFFF;
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: clamp(24px, 4vw, 32px);
+            padding-bottom: 16px;
+            border-bottom: 1px solid #E0E0E0;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .nav-section {
+            display: flex;
+            align-items: center;
+            gap: clamp(12px, 2vw, 24px);
+        }
+
+        .period-title {
+            font-family: "Songti SC", "SimSun", serif;
+            font-size: clamp(20px, 3vw, 24px);
+            font-weight: 600;
+            color: #2D2D2D;
+            min-width: 120px;
+            text-align: center;
+        }
+
+        .btn-text {
+            font-size: clamp(13px, 1.5vw, 14px);
+            color: #6E6E6E;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px 12px;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-text:hover {
+            background: rgba(0,0,0,0.05);
+        }
+
+        .btn-outline {
+            font-size: clamp(12px, 1.3vw, 13px);
+            color: #2D2D2D;
+            background: transparent;
+            border: 1px solid #E0E0E0;
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-outline:hover {
+            background: rgba(0,0,0,0.05);
+        }
+
+        .btn-primary {
+            font-size: clamp(12px, 1.3vw, 13px);
+            color: #FFFFFF;
+            background: #2D2D2D;
+            border: none;
+            padding: 8px 20px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-primary:hover {
+            opacity: 0.85;
+        }
+
+        .btn-secondary {
+            font-size: 12px;
+            color: #6E6E6E;
+            background: none;
+            border: 1px solid #E0E0E0;
+            padding: 6px 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(0,0,0,0.05);
+        }
+
+        .btn-delete {
+            font-size: 12px;
+            color: #E02020;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 6px 12px;
+        }
+
+        .btn-delete:hover {
+            text-decoration: underline;
+        }
+
+        .actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        /* ==================== 搜索功能样式 ==================== */
+        .search-section {
+            position: relative;
+        }
+
+        .search-input {
+            width: 200px;
+            padding: 8px 32px 8px 12px;
+            border: 1px solid #E0E0E0;
+            background: #FFFFFF;
+            font-size: 13px;
+            color: #2D2D2D;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #2D2D2D;
+            width: 240px;
+        }
+
+        .search-input::placeholder {
+            color: #999999;
+        }
+
+        .search-clear {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: #999999;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 0 4px;
+            display: none;
+        }
+
+        .search-clear.visible {
+            display: block;
+        }
+
+        .search-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            margin-top: 4px;
+            background: #FFFFFF;
+            border: 1px solid #E0E0E0;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 100;
+            display: none;
+        }
+
+        .search-dropdown.active {
+            display: block;
+        }
+
+        .search-result-item {
+            padding: 12px 16px;
+            cursor: pointer;
+            border-bottom: 1px solid #F0F0F0;
+            transition: background 0.15s;
+        }
+
+        .search-result-item:last-child {
+            border-bottom: none;
+        }
+
+        .search-result-item:hover {
+            background: #FAFAFA;
+        }
+
+        .search-result-date {
+            font-size: 12px;
+            color: #999999;
+            margin-bottom: 2px;
+        }
+
+        .search-result-title {
+            font-size: 14px;
+            color: #2D2D2D;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* ==================== 回收站样式 ==================== */
+        .trash-btn {
+            font-size: 13px;
+            color: #6E6E6E;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px 12px;
+            transition: color 0.2s;
+        }
+
+        .trash-btn:hover {
+            color: #E02020;
+        }
+
+        .trash-count {
+            display: inline-block;
+            margin-left: 4px;
+            padding: 2px 6px;
+            background: #E02020;
+            color: #FFFFFF;
+            font-size: 11px;
+            border-radius: 10px;
+            min-width: 18px;
+            text-align: center;
+        }
+
+        .trash-item {
+            padding: 16px;
+            border-bottom: 1px solid #E0E0E0;
+            opacity: 0.7;
+        }
+
+        .trash-item:hover {
+            opacity: 1;
+            background: #FAFAFA;
+        }
+
+        .trash-item-deleted {
+            font-size: 11px;
+            color: #999999;
+            margin-bottom: 4px;
+        }
+
+        .trash-item-title {
+            font-size: 14px;
+            color: #2D2D2D;
+            text-decoration: line-through;
+        }
+
+        .trash-item-actions {
+            margin-top: 8px;
+            display: flex;
+            gap: 8px;
+        }
+
+        /* ==================== 时间线视图样式 ==================== */
+        .timeline-view {
+            display: none;
+            background: #FFFFFF;
+            border: 1px solid #E0E0E0;
+            padding: 24px;
+        }
+
+        .timeline-view.active {
+            display: block;
+        }
+
+        .timeline-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .timeline-date-group {
+            margin-bottom: 24px;
+        }
+
+        .timeline-date-header {
+            font-family: "Songti SC", serif;
+            font-size: 18px;
+            font-weight: 600;
+            color: #2D2D2D;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #2D2D2D;
+            margin-bottom: 16px;
+        }
+
+        .timeline-item {
+            display: flex;
+            gap: 16px;
+            padding: 16px;
+            border: 1px solid #E0E0E0;
+            transition: background 0.2s;
+        }
+
+        .timeline-item:hover {
+            background: #FAFAFA;
+        }
+
+        .timeline-item-checkbox {
+            display: flex;
+            align-items: center;
+        }
+
+        .timeline-item-checkbox input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .timeline-item-content {
+            flex: 1;
+        }
+
+        .timeline-item-time {
+            font-size: 12px;
+            color: #999999;
+            margin-bottom: 4px;
+        }
+
+        .timeline-item-title {
+            font-size: 15px;
+            font-weight: 500;
+            color: #2D2D2D;
+            margin-bottom: 4px;
+        }
+
+        .timeline-item-tag {
+            display: inline-block;
+            font-size: 11px;
+            padding: 2px 8px;
+            margin-right: 8px;
+        }
+
+        .timeline-empty {
+            text-align: center;
+            padding: 60px 24px;
+            color: #999999;
+        }
+
+        /* ==================== 批量操作栏样式 ==================== */
+        .batch-toolbar {
+            display: none;
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #2D2D2D;
+            color: #FFFFFF;
+            padding: 12px 24px;
+            border-radius: 8px;
+            z-index: 1000;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        }
+
+        .batch-toolbar.active {
+            display: flex;
+        }
+
+        .batch-count {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .batch-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .batch-btn {
+            padding: 8px 16px;
+            border: 1px solid rgba(255,255,255,0.3);
+            background: transparent;
+            color: #FFFFFF;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .batch-btn:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .batch-btn.danger:hover {
+            background: #E02020;
+            border-color: #E02020;
+        }
+
+        .batch-cancel {
+            margin-left: 8px;
+            padding: 8px 12px;
+            background: none;
+            border: none;
+            color: rgba(255,255,255,0.7);
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .batch-cancel:hover {
+            color: #FFFFFF;
+        }
+
+        .batch-select-all {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 16px;
+            padding: 12px;
+            background: #FAFAFA;
+            border: 1px solid #E0E0E0;
+        }
+
+        .batch-select-all input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .batch-select-all label {
+            font-size: 14px;
+            color: #2D2D2D;
+            cursor: pointer;
+        }
+
+        .search-result-highlight {
+            background: rgba(7, 193, 96, 0.2);
+            padding: 0 2px;
+        }
+
+        .search-empty {
+            padding: 24px 16px;
+            text-align: center;
+            color: #999999;
+            font-size: 13px;
+        }
+
+        .stats {
+            display: flex;
+            gap: clamp(24px, 4vw, 48px);
+            margin-bottom: clamp(24px, 4vw, 32px);
+            font-size: clamp(12px, 1.5vw, 14px);
+            color: #6E6E6E;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+        }
+
+        .stat-number {
+            font-family: "Songti SC", "SimSun", serif;
+            font-size: clamp(24px, 3vw, 28px);
+            font-weight: 600;
+            color: #2D2D2D;
+        }
+
+        /* ==================== 标签样式 ==================== */
+        .tag-selector {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 4px;
+        }
+
+        .tag-option {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            border: 1px solid #E0E0E0;
+            cursor: pointer;
+            font-size: 12px;
+            color: #6E6E6E;
+            transition: all 0.2s;
+            background: #FFFFFF;
+        }
+
+        .tag-option:hover {
+            background: rgba(0,0,0,0.03);
+        }
+
+        .tag-option.active {
+            border-color: #2D2D2D;
+            color: #2D2D2D;
+            background: rgba(0,0,0,0.05);
+        }
+
+        .tag-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .event-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            color: #6E6E6E;
+            margin-bottom: 4px;
+        }
+
+        .day-event-tags {
+            display: flex;
+            gap: 3px;
+            margin-bottom: 2px;
+            flex-wrap: wrap;
+        }
+
+        .day-event-tag {
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+        }
+
+        /* 拖拽样式 */
+        .event-item.draggable {
+            cursor: grab;
+        }
+
+        .event-item.draggable:active {
+            cursor: grabbing;
+        }
+
+        .event-item.dragging {
+            opacity: 0.5;
+            background: #FAFAFA;
+        }
+
+        .event-item.drag-over {
+            border-top: 2px solid #07C160;
+        }
+
+        .drag-handle {
+            color: #CCCCCC;
+            font-size: 14px;
+            margin-right: 8px;
+            cursor: grab;
+        }
+
+        .drag-handle:hover {
+            color: #999999;
+        }
+
+        /* ==================== 月视图样式 ==================== */
+        .month-view .calendar-wrapper {
+            background: #FFFFFF;
+            border: 1px solid #E0E0E0;
+        }
+
+        .month-view .weekdays {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            border-bottom: 1px solid #E0E0E0;
+        }
+
+        .month-view .weekday {
+            padding: clamp(12px, 1.5vw, 16px) 4px;
+            text-align: center;
+            font-size: clamp(11px, 1.2vw, 13px);
+            color: #6E6E6E;
+            font-weight: 500;
+        }
+
+        .month-view .weekday.weekend {
+            color: #999999;
+        }
+
+        .month-view .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            grid-auto-rows: minmax(120px, auto);
+        }
+
+        .month-view .calendar-day {
+            min-height: 120px;
+            padding: clamp(10px, 1.5vw, 16px);
+            border-right: 1px solid #E0E0E0;
+            border-bottom: 1px solid #E0E0E0;
+            cursor: pointer;
+            transition: background 0.15s;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .month-view .calendar-day:nth-child(7n) {
+            border-right: none;
+        }
+
+        .month-view .calendar-day:hover {
+            background: rgba(0,0,0,0.03);
+        }
+
+        .month-view .calendar-day.other-month {
+            color: #999999;
+            background: #FAFAFA;
+        }
+
+        /* 今天 - 用边框标识 */
+        .month-view .calendar-day.today {
+            border: 2px solid #07C160;
+        }
+
+        .month-view .calendar-day.today .day-number {
+            color: #07C160;
+            font-weight: 600;
+        }
+
+        /* 有事件 - 绿色背景 + 绿色数字 */
+        .month-view .calendar-day.has-event .day-number {
+            color: #07C160;
+            font-weight: 500;
+        }
+
+        .month-view .calendar-day.weekend {
+            background: #FDFDFD;
+        }
+
+        .month-view .calendar-day.has-event {
+            background: rgba(7, 193, 96, 0.08);
+        }
+
+        .month-view .calendar-day.has-event:hover {
+            background: rgba(7, 193, 96, 0.12);
+        }
+
+        .month-view .day-number {
+            font-size: clamp(13px, 1.6vw, 15px);
+            font-weight: 500;
+            margin-bottom: 8px;
+            flex-shrink: 0;
+        }
+
+        .month-view .day-events {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            overflow: hidden;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .month-view .day-event-item {
+            font-size: clamp(11px, 1.1vw, 12px);
+            color: #2D2D2D;
+            line-height: 1.5;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 100%;
+            padding: 2px 0;
+        }
+
+        .month-view .event-more {
+            font-size: clamp(10px, 1vw, 11px);
+            color: #999999;
+            margin-top: 4px;
+            flex-shrink: 0;
+        }
+
+        /* ==================== 年视图样式 ==================== */
+        .year-view {
+            display: none;
+        }
+
+        .year-view.active {
+            display: block;
+        }
+
+        .year-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: clamp(16px, 3vw, 32px);
+        }
+
+        .year-month-card {
+            background: #FFFFFF;
+            border: 1px solid #E0E0E0;
+            padding: clamp(16px, 2.5vw, 24px);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .year-month-card:hover {
+            background: rgba(0,0,0,0.02);
+        }
+
+        .year-month-card.current-month {
+            border-color: #07C160;
+            background: rgba(7, 193, 96, 0.04);
+        }
+
+        .year-month-title {
+            font-family: "Songti SC", "SimSun", serif;
+            font-size: clamp(16px, 2vw, 18px);
+            font-weight: 600;
+            color: #2D2D2D;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+
+        .year-month-card.current-month .year-month-title {
+            color: #07C160;
+        }
+
+        .year-mini-calendar {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 2px;
+        }
+
+        .year-mini-weekday {
+            text-align: center;
+            font-size: clamp(9px, 1vw, 10px);
+            color: #999999;
+            padding: 2px;
+        }
+
+        .year-mini-day {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: clamp(10px, 1.2vw, 11px);
+            color: #2D2D2D;
+            position: relative;
+        }
+
+        .year-mini-day.other-month {
+            color: #CCCCCC;
+        }
+
+        .year-mini-day.today {
+            color: #07C160;
+            font-weight: 600;
+        }
+
+        .year-mini-day.has-event::after {
+            content: "";
+            position: absolute;
+            bottom: 1px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 3px;
+            height: 3px;
+            background: #07C160;
+            border-radius: 50%;
+        }
+
+        .year-mini-day.event-count-2::after {
+            width: 8px;
+            border-radius: 2px;
+        }
+
+        .year-mini-day.event-count-3::after {
+            width: 12px;
+            border-radius: 2px;
+        }
+
+        /* 帮助面板 */
+        .help-panel {
+            background: #FFFFFF;
+            border: 1px solid #E0E0E0;
+            padding: clamp(20px, 3vw, 24px);
+            margin-bottom: clamp(24px, 4vw, 32px);
+            display: none;
+        }
+
+        .help-panel.active {
+            display: block;
+        }
+
+        .help-panel h3 {
+            font-family: "Songti SC", "SimSun", serif;
+            font-size: clamp(16px, 2vw, 18px);
+            margin-bottom: 16px;
+            color: #2D2D2D;
+        }
+
+        .help-panel p {
+            font-size: clamp(13px, 1.5vw, 14px);
+            color: #6E6E6E;
+            margin-bottom: 12px;
+        }
+
+        .help-panel pre {
+            background: #F9F8F4;
+            padding: 16px;
+            font-size: 12px;
+            line-height: 1.8;
+            overflow-x: auto;
+            border: 1px solid #E0E0E0;
+            margin: 12px 0;
+        }
+
+        .help-panel code {
+            font-family: "SF Mono", Monaco, monospace;
+            font-size: 12px;
+            background: #F0F0F0;
+            padding: 2px 6px;
+        }
+
+        /* ==================== 多日历样式 ==================== */
+        .calendar-sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 200px;
+            background: #FFFFFF;
+            border-right: 1px solid #E0E0E0;
+            padding: 24px 16px;
+            z-index: 100;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease;
+        }
+
+        .calendar-sidebar.open {
+            transform: translateX(0);
+        }
+
+        .cal-sidebar-toggle {
+            position: fixed;
+            left: 16px;
+            bottom: 16px;
+            z-index: 101;
+            width: 40px;
+            height: 40px;
+            border: 1px solid #E0E0E0;
+            background: #FFFFFF;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .sidebar-header {
+            font-family: "Songti SC", serif;
+            font-size: 18px;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #E0E0E0;
+        }
+
+        .calendar-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .calendar-item {
+            padding: 12px;
+            border: 1px solid #E0E0E0;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s;
+        }
+
+        .calendar-item:hover {
+            background: rgba(0,0,0,0.03);
+        }
+
+        .calendar-item.active {
+            background: #2D2D2D;
+            color: #FFFFFF;
+            border-color: #2D2D2D;
+        }
+
+        .calendar-item-count {
+            font-size: 12px;
+            opacity: 0.6;
+        }
+
+        .add-calendar-btn {
+            margin-top: 16px;
+            padding: 12px;
+            border: 1px dashed #E0E0E0;
+            background: transparent;
+            cursor: pointer;
+            width: 100%;
+            font-size: 13px;
+            color: #6E6E6E;
+        }
+
+        .add-calendar-btn:hover {
+            border-color: #2D2D2D;
+            color: #2D2D2D;
+        }
+
+        /* ==================== 重复事件样式 ==================== */
+        .repeat-options {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 8px;
+        }
+
+        .repeat-type-selector {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .repeat-option {
+            padding: 6px 12px;
+            border: 1px solid #E0E0E0;
+            background: #FFFFFF;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .repeat-option.active {
+            background: #2D2D2D;
+            color: #FFFFFF;
+            border-color: #2D2D2D;
+        }
+
+        .repeat-end-options {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .repeat-instance-tag {
+            display: inline-block;
+            font-size: 10px;
+            padding: 2px 6px;
+            background: #F0F0F0;
+            color: #6E6E6E;
+            margin-left: 8px;
+        }
+
+        /* ==================== 推送状态样式 ==================== */
+        .status-selector {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 4px;
+        }
+
+        .status-option {
+            padding: 6px 12px;
+            border: 1px solid #E0E0E0;
+            background: #FFFFFF;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .status-option:hover {
+            background: rgba(0,0,0,0.03);
+        }
+
+        .status-option.active {
+            border-color: #2D2D2D;
+            font-weight: 500;
+        }
+
+        .status-option.status-pending.active {
+            background: #FFF3CD;
+            border-color: #FFC107;
+            color: #856404;
+        }
+
+        .status-option.status-published.active {
+            background: #D4EDDA;
+            border-color: #28A745;
+            color: #155724;
+        }
+
+        .status-option.status-deleted.active {
+            background: #F8D7DA;
+            border-color: #DC3545;
+            color: #721C24;
+        }
+
+        .event-status-badge {
+            display: inline-block;
+            font-size: 10px;
+            padding: 2px 8px;
+            margin-left: 8px;
+            border-radius: 2px;
+        }
+
+        .event-status-badge.status-pending {
+            background: #FFF3CD;
+            color: #856404;
+        }
+
+        .event-status-badge.status-published {
+            background: #D4EDDA;
+            color: #155724;
+        }
+
+        .event-status-badge.status-deleted {
+            background: #F8D7DA;
+            color: #721C24;
+            text-decoration: line-through;
+        }
+
+        .day-event-item.status-published {
+            opacity: 0.7;
+        }
+
+        .day-event-item.status-deleted {
+            opacity: 0.5;
+            text-decoration: line-through;
+        }
+
+        /* 备注样式 */
+        .note-textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #E0E0E0;
+            font-size: 14px;
+            color: #2D2D2D;
+            background: #FFFFFF;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        .note-textarea:focus {
+            outline: none;
+            border-color: #2D2D2D;
+        }
+
+        .event-note {
+            font-size: 12px;
+            color: #6E6E6E;
+            margin-top: 8px;
+            padding: 8px;
+            background: #FAFAFA;
+            border-left: 3px solid #E0E0E0;
+        }
+
+        /* ==================== 统计面板样式 ==================== */
+        .stats-panel {
+            background: #FFFFFF;
+            border: 1px solid #E0E0E0;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            padding: 20px;
+            border: 1px solid #E0E0E0;
+            text-align: center;
+        }
+
+        .stat-card-number {
+            font-family: "Songti SC", serif;
+            font-size: 36px;
+            font-weight: 600;
+            color: #2D2D2D;
+            margin-bottom: 4px;
+        }
+
+        .stat-card-label {
+            font-size: 13px;
+            color: #6E6E6E;
+        }
+
+        .stats-chart {
+            margin-top: 24px;
+        }
+
+        .stats-chart-title {
+            font-family: "Songti SC", serif;
+            font-size: 16px;
+            margin-bottom: 16px;
+            color: #2D2D2D;
+        }
+
+        .bar-chart {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            height: 150px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid #E0E0E0;
+            position: relative;
+        }
+
+        .bar-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .bar {
+            width: 100%;
+            background: #2D2D2D;
+            min-height: 4px;
+            transition: height 0.3s ease;
+        }
+
+        .bar-label {
+            font-size: 11px;
+            color: #6E6E6E;
+            white-space: nowrap;
+        }
+
+        .tag-distribution {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .tag-stat-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border: 1px solid #E0E0E0;
+        }
+
+        .tag-stat-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .tag-stat-name {
+            font-size: 13px;
+        }
+
+        .tag-stat-count {
+            font-size: 13px;
+            color: #6E6E6E;
+            margin-left: 4px;
+        }
+
+        /* 标签管理样式 */
+        .tag-manager-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .tag-manager-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border: 1px solid #E0E0E0;
+            background: #FAFAFA;
+        }
+
+        .tag-color-picker {
+            width: 32px;
+            height: 32px;
+            border: 1px solid #E0E0E0;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .tag-name-input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #E0E0E0;
+            font-size: 14px;
+        }
+
+        .tag-name-input:focus {
+            outline: none;
+            border-color: #2D2D2D;
+        }
+
+        .tag-add-form {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            padding-top: 16px;
+            border-top: 1px solid #E0E0E0;
+        }
+
+        /* 跨日拖拽样式 */
+        .calendar-day.drag-over {
+            background: rgba(7, 193, 96, 0.15) !important;
+            border: 2px dashed #07C160 !important;
+        }
+
+        .calendar-day.drag-over * {
+            pointer-events: none;
+        }
+
+        /* 弹窗 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.4);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            padding: 16px;
+            pointer-events: none;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: #FFFFFF;
+            border: 1px solid #E0E0E0;
+            width: 100%;
+            max-width: 480px;
+            max-height: 85vh;
+            overflow-y: auto;
+            pointer-events: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 24px;
+            border-bottom: 1px solid #E0E0E0;
+        }
+
+        .modal-title {
+            font-family: "Songti SC", "SimSun", serif;
+            font-size: clamp(18px, 2.5vw, 20px);
+            color: #2D2D2D;
+        }
+
+        .modal-close {
+            font-size: 20px;
+            color: #999999;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+        }
+
+        .modal-close:hover {
+            color: #2D2D2D;
+        }
+
+        .modal-body {
+            padding: clamp(16px, 3vw, 24px);
+        }
+
+        /* 事件列表 */
+        .event-list {
+            margin-bottom: 24px;
+        }
+
+        .event-item {
+            padding: 16px 0;
+            border-bottom: 1px solid #E0E0E0;
+        }
+
+        .event-item:last-child {
+            border-bottom: none;
+        }
+
+        .event-item.editing {
+            background: #FAFAFA;
+            margin: 0 -16px;
+            padding: 16px;
+        }
+
+        .event-title {
+            font-size: clamp(14px, 1.8vw, 15px);
+            font-weight: 500;
+            color: #2D2D2D;
+            margin-bottom: 4px;
+            word-break: break-all;
+        }
+
+        .event-meta {
+            font-size: clamp(12px, 1.5vw, 13px);
+            color: #6E6E6E;
+            margin-bottom: 4px;
+        }
+
+        .event-desc {
+            font-size: clamp(12px, 1.5vw, 13px);
+            color: #6E6E6E;
+            line-height: 1.6;
+            word-break: break-all;
+        }
+
+        .event-actions {
+            margin-top: 12px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 48px 24px;
+            color: #999999;
+            font-size: 14px;
+        }
+
+        /* 表单 */
+        .form-section {
+            padding-top: 24px;
+            border-top: 1px solid #E0E0E0;
+        }
+
+        .form-section h4 {
+            font-family: "Songti SC", "SimSun", serif;
+            font-size: 16px;
+            margin-bottom: 16px;
+            color: #2D2D2D;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            color: #6E6E6E;
+            margin-bottom: 6px;
+        }
+
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #E0E0E0;
+            font-size: 14px;
+            color: #2D2D2D;
+            background: #FFFFFF;
+            font-family: inherit;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #2D2D2D;
+        }
+
+        .form-group input::placeholder,
+        .form-group textarea::placeholder {
+            color: #999999;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 12px;
+        }
+
+        @media (max-width: 400px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            padding-top: 16px;
+        }
+
+        .divider {
+            text-align: center;
+            margin: clamp(24px, 5vw, 32px) 0;
+            color: #999999;
+            font-size: 14px;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: " —— ";
+            color: #E0E0E0;
+        }
+
+        /* 响应式优化 */
+        @media (max-width: 768px) {
+            .toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .nav-section {
+                justify-content: center;
+            }
+
+            .actions {
+                justify-content: center;
+            }
+
+            .year-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .month-view .calendar-grid {
+                grid-auto-rows: minmax(80px, auto);
+            }
+
+            .month-view .calendar-day {
+                min-height: 80px;
+                padding: 8px 6px;
+            }
+
+            .month-view .day-event-item:nth-child(n+2) {
+                display: none;
+            }
+
+            .month-view .calendar-day.has-event .day-events::after {
+                content: "";
+                display: block;
+                width: 6px;
+                height: 6px;
+                background: #07C160;
+                border-radius: 50%;
+                margin-top: 4px;
+            }
+        }
+
+        /* 中等屏幕显示优化 */
+        @media (min-width: 769px) and (max-width: 1100px) {
+            .year-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .month-view .calendar-grid {
+                grid-auto-rows: minmax(100px, auto);
+            }
+
+            .month-view .calendar-day {
+                min-height: 100px;
+            }
+        }
+
+        @media (min-width: 1101px) {
+            .year-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .month-view .calendar-grid {
+                grid-auto-rows: minmax(140px, auto);
+            }
+
+            .month-view .calendar-day {
+                min-height: 140px;
+            }
+        }
+
+        /* 超大屏幕 */
+        @media (min-width: 1400px) {
+            .month-view .calendar-grid {
+                grid-auto-rows: minmax(160px, auto);
+            }
+
+            .month-view .calendar-day {
+                min-height: 160px;
+            }
+        }
+        .hm-cell { width:12px; height:12px; border-radius:2px; display:inline-block; }
+        .hm-0 { background:#EBEDF0; }
+        .hm-1 { background:#C6E48B; }
+        .hm-2 { background:#7BC96F; }
+        .hm-3 { background:#239A3B; }
+        .hm-4 { background:#196127; }
+        .hm-row { display:flex; align-items:center; gap:2px; margin-bottom:2px; }
+        .hm-label { width:28px; font-size:10px; color:#999; text-align:right; padding-right:4px; }
+</style>
+{% endblock %}
+
+{% block content %}
+    <button class="cal-sidebar-toggle" id="calSidebarToggle" onclick="toggleSidebar()">&#x1F4C5;</button>
+
+    <aside class="calendar-sidebar" id="calendarSidebar">
+        <div class="sidebar-header">我的日历</div>
+        <div class="calendar-list" id="calendarList"></div>
+        <button class="add-calendar-btn" onclick="addNewCalendar()">+ 新建日历</button>
+    </aside>
+
+    <header class="header">
+        <div>
+            <h1>推送日历</h1>
+            <p class="subtitle">公众号内容发布计划表</p>
+        </div>
+        <div class="view-toggle">
+            <button class="view-btn active" data-view="month" onclick="switchView('month')">月视图</button>
+            <button class="view-btn" data-view="year" onclick="switchView('year')">年视图</button>
+            <button class="view-btn" data-view="timeline" onclick="switchView('timeline')">时间线</button>
+        </div>
+    </header>
+
+    <div class="toolbar">
+        <div class="nav-section">
+            <button class="btn-text" onclick="navigate(-1)">&larr; 上一<span class="nav-unit">月</span></button>
+            <div class="period-title" id="periodTitle"></div>
+            <button class="btn-text" onclick="navigate(1)">下一<span class="nav-unit">月</span> &rarr;</button>
+            <button class="btn-text" onclick="goToToday()">今天</button>
+        </div>
+
+        <div class="search-section">
+            <input type="text"
+                   class="search-input"
+                   id="searchInput"
+                   placeholder="搜索推送..."
+                   oninput="handleSearch(this.value)"
+                   onfocus="showSearchDropdown()"
+                   onblur="hideSearchDropdownDelayed()">
+            <button class="search-clear" id="searchClear" onclick="clearSearch()">&times;</button>
+            <div class="search-dropdown" id="searchDropdown"></div>
+        </div>
+
+        <div class="actions">
+            <button class="btn-outline" onclick="toggleHelp()">导入说明</button>
+            <button class="btn-outline" onclick="openTagManager()">标签管理</button>
+            <button class="btn-outline" onclick="openStatsPanel()">统计</button>
+            <button class="btn-outline" onclick="openTrashPanel()">
+                回收站<span class="trash-count" id="trashCount" style="display: none;">0</span>
+            </button>
+            <button class="btn-outline" onclick="document.getElementById('fileInput').click()">导入数据</button>
+            <input type="file" id="fileInput" class="file-input" accept=".csv,.json" onchange="handleFileImport(event)">
+            <button class="btn-outline" id="syncPublishedBtn" onclick="syncPublishedArticles()">同步已发文章</button>
+            <button class="btn-primary" onclick="exportData()">导出</button>
+        </div>
+    </div>
+
+    <!-- 阅读量热力图 -->
+    <div style="margin-bottom: 32px; background:#fff; border:1px solid #E0E0E0; padding: 20px 24px;">
+        <div style="font-size:14px;font-weight:600;color:#2D2D2D;margin-bottom:12px;">阅读量热力图</div>
+        <div id="heatmapMonths" style="position:relative;height:16px;font-size:11px;color:#999;padding-left:32px;margin-bottom:4px;"></div>
+        <div id="heatmapGrid"></div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:#999;">
+            <span>少</span>
+            <div class="hm-cell hm-0"></div><div class="hm-cell hm-1"></div>
+            <div class="hm-cell hm-2"></div><div class="hm-cell hm-3"></div>
+            <div class="hm-cell hm-4"></div>
+            <span>多</span>
+        </div>
+    </div>
+
+    <div class="help-panel" id="helpPanel">
+        <h3>数据导入格式</h3>
+        <p>支持 CSV 或 JSON 格式，字段包括 date（日期，YYYY-MM-DD）、title（标题）、time（时间，可选）、description（描述，可选）。</p>
+
+        <p>CSV 示例：</p>
+        <pre>date,title,time,description
+2026-02-14,情人节专题,20:00,浪漫主题推送内容
+2026-02-20,产品上新,10:00,春季新品发布</pre>
+
+        <p>JSON 示例：</p>
+        <pre>[{
+  "date": "2026-02-14",
+  "title": "情人节专题",
+  "time": "20:00",
+  "description": "浪漫主题推送内容"
+}]</pre>
+    </div>
+
+    <div class="stats">
+        <div class="stat-item">
+            <span class="stat-number" id="periodCount">0</span>
+            <span id="periodLabel">本月推送</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-number" id="totalCount">0</span>
+            <span>总计划数</span>
+        </div>
+    </div>
+
+    <!-- 月视图 -->
+    <div class="month-view" id="monthView">
+        <div class="calendar-wrapper">
+            <div class="weekdays">
+                <div class="weekday">周一</div>
+                <div class="weekday">周二</div>
+                <div class="weekday">周三</div>
+                <div class="weekday">周四</div>
+                <div class="weekday">周五</div>
+                <div class="weekday weekend">周六</div>
+                <div class="weekday weekend">周日</div>
+            </div>
+            <div class="calendar-grid" id="monthGrid"></div>
+        </div>
+    </div>
+
+    <!-- 年视图 -->
+    <div class="year-view" id="yearView">
+        <div class="year-grid" id="yearGrid"></div>
+    </div>
+
+    <!-- 时间线视图 -->
+    <div class="timeline-view" id="timelineView">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding: 12px; background: #FAFAFA; border: 1px solid #E0E0E0;">
+            <div class="batch-select-all" style="margin: 0; border: none; background: transparent;">
+                <input type="checkbox" id="selectAllTimeline" onchange="toggleSelectAll()">
+                <label for="selectAllTimeline">全选</label>
+            </div>
+            <button class="btn-outline" id="batchModeBtn" onclick="toggleBatchMode()">进入批量模式</button>
+        </div>
+        <div class="timeline-list" id="timelineList"></div>
+    </div>
+
+    <div class="divider">End</div>
+
+    <!-- 批量操作工具栏 -->
+    <div class="batch-toolbar" id="batchToolbar">
+        <span class="batch-count">已选择 <span id="batchSelectedCount">0</span> 项</span>
+        <div class="batch-actions">
+            <button class="batch-btn" onclick="batchChangeTag()">修改标签</button>
+            <button class="batch-btn" onclick="batchChangeStatus()">修改状态</button>
+            <button class="batch-btn danger" onclick="batchDelete()">删除</button>
+        </div>
+        <button class="batch-cancel" onclick="cancelBatchMode()">取消</button>
+    </div>
+
+    <!-- 日期详情弹窗 -->
+    <div class="modal-overlay" id="dayModal" onclick="closeModal(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modalTitle">日期详情</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modalContent"></div>
+        </div>
+    </div>
+
+    <!-- 标签管理弹窗 -->
+    <div class="modal-overlay" id="tagModal" onclick="closeTagModal(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 class="modal-title">标签管理</h3>
+                <button class="modal-close" onclick="closeTagModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="tagModalContent"></div>
+        </div>
+    </div>
+
+    <!-- 回收站弹窗 -->
+    <div class="modal-overlay" id="trashModal" onclick="closeTrashModal(event)">
+        <div class="modal" onclick="event.stopPropagation()" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3 class="modal-title">回收站</h3>
+                <button class="modal-close" onclick="closeTrashModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="trashModalContent">
+                <div class="empty-state" id="trashEmptyState">回收站是空的</div>
+                <div id="trashList"></div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    window.pushCalendarPrefill = {{ (push_calendar_prefill or {})|tojson(indent=2) }};
+</script>
+<script src="{{ url_for('static', filename='js/push-calendar.js') }}"></script>
+<script>
+    loadCurrentCalendar();
+    renderCalendarList();
+    render();
+    updateTrashCount();
+    applyQueryPrefill(window.pushCalendarPrefill || {});
+
+    /* ── 阅读量热力图 ─────────────────────────────────── */
+    (async function loadHeatmap() {
+        const data = await fetch('/api/heatmap').then(r => r.json());
+        const map = {};
+        data.forEach(d => { map[d.date] = d; });
+
+        const grid = document.getElementById('heatmapGrid');
+        const monthsRow = document.getElementById('heatmapMonths');
+        grid.innerHTML = ''; monthsRow.innerHTML = '';
+
+        const today = new Date();
+        const dow = today.getDay();
+        const endDate = new Date(today);
+        endDate.setDate(endDate.getDate() + (6 - dow));
+        const startDate = new Date(endDate);
+        startDate.setDate(startDate.getDate() - (53 * 7 - 1));
+
+        const dayLabels = ['日','一','二','三','四','五','六'];
+        for (let d = 0; d < 7; d++) {
+            const row = document.createElement('div');
+            row.className = 'hm-row';
+            const lbl = document.createElement('div');
+            lbl.className = 'hm-label';
+            lbl.textContent = d % 2 === 1 ? dayLabels[d] : '';
+            row.appendChild(lbl);
+            for (let w = 0; w < 53; w++) {
+                const cd = new Date(startDate);
+                cd.setDate(cd.getDate() + w * 7 + d);
+                const ds = cd.toISOString().slice(0, 10);
+                const cell = document.createElement('div');
+                cell.className = 'hm-cell hm-' + (map[ds] ? map[ds].level : 0);
+                cell.title = ds + ': ' + ((map[ds] && map[ds].reads) || 0).toLocaleString() + ' 阅读';
+                if (cd > today) cell.style.visibility = 'hidden';
+                row.appendChild(cell);
+            }
+            grid.appendChild(row);
+        }
+        let lastM = -1;
+        for (let w = 0; w < 53; w++) {
+            const d = new Date(startDate);
+            d.setDate(d.getDate() + w * 7);
+            const m = d.getMonth();
+            if (m !== lastM) {
+                const sp = document.createElement('span');
+                sp.textContent = (m + 1) + '月';
+                sp.style.cssText = `position:absolute;left:${32 + w * 14}px`;
+                monthsRow.appendChild(sp);
+                lastM = m;
+            }
+        }
+    })();
+
+    /* ── 同步已发文章到日历 ───────────────────────────── */
+    async function syncPublishedArticles() {
+        const btn = document.getElementById('syncPublishedBtn');
+        btn.disabled = true; btn.textContent = '同步中...';
+        try {
+            const articles = await fetch('/api/calendar').then(r => r.json());
+            let added = 0;
+            articles.forEach(art => {
+                if (!art.publish_date || !art.title) return;
+                const dup = events.find(e => e.date === art.publish_date && e.title === art.title);
+                if (!dup) {
+                    events.push({ date: art.publish_date, title: art.title,
+                                  status: 'published', note: '阅读量: ' + (art.total_reads || 0) });
+                    added++;
+                }
+            });
+            saveCurrentCalendar();
+            render();
+            alert('同步完成，新增 ' + added + ' 篇（已存在的跳过）');
+        } catch(e) {
+            alert('同步失败: ' + e.message);
+        } finally {
+            btn.disabled = false; btn.textContent = '同步已发文章';
+        }
+    }
+</script>
+{% endblock %}

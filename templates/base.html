@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}公众号管理平台{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/zhijian.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+    <script src="{{ url_for('static', filename='js/chart-utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/date-range.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/panel-manager.js') }}"></script>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')">☰</button>
+
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <h1>公众号管理平台</h1>
+                <div class="subtitle">WeChat Analytics</div>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-group">
+                    <a class="nav-item{% if request.path == '/' %} active{% endif %}" href="/">数据总览</a>
+                    <a class="nav-item{% if '/master' in request.path %} active{% endif %}" href="/master">标准主档</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-label">日历</div>
+                    <a class="nav-item{% if '/push-calendar' in request.path %} active{% endif %}" href="/push-calendar">推送日历</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-label">分析</div>
+                    <a class="nav-item{% if '/insights' in request.path %} active{% endif %}" href="/insights">深度洞察</a>
+                    <a class="nav-item{% if '/predict' in request.path %} active{% endif %}" href="/predict">发文预测</a>
+                    <a class="nav-item{% if '/competitor' in request.path %} active{% endif %}" href="/competitor">对标分析</a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-label">系统</div>
+                    <a class="nav-item{% if '/settings' in request.path %} active{% endif %}" href="/settings">设置</a>
+                </div>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            {% if message %}
+            <div class="alert alert-{{ message_type|default('success') }}">{{ message }}</div>
+            {% endif %}
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

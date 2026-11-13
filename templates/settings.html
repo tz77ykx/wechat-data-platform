@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% block title %}设置 - 公众号管理平台{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2 class="page-title">设置</h2>
+        <div class="page-subtitle">凭证管理 / 下载触发 / 文章列表</div>
+    </div>
+</div>
+<!-- 微信后台凭证 -->
+<div class="card">
+    <div class="card-title">微信后台凭证</div>
+    <form method="POST" action="/settings">
+        <div class="form-group">
+            <label>Token</label>
+            <textarea class="form-textarea" name="token" rows="2" placeholder="微信后台 token">{{ token or '' }}</textarea>
+        </div>
+        <div class="form-group">
+            <label>Fingerprint</label>
+            <textarea class="form-textarea" name="fingerprint" rows="2" placeholder="浏览器指纹">{{ fingerprint or '' }}</textarea>
+        </div>
+        <div class="form-group">
+            <label>Cookies</label>
+            <textarea class="form-textarea" name="cookies" rows="4" placeholder="微信后台 cookies">{{ cookies or '' }}</textarea>
+        </div>
+        <div class="mt-16">
+            <button type="submit" class="btn btn-primary">保存凭证</button>
+        </div>
+    </form>
+    {% if ext_path %}
+    <div class="mt-16" style="padding:12px 16px;border:1px solid var(--border);background:var(--bg);font-size:13px;">
+        <strong>Chrome 扩展安装指引：</strong><br>
+        <span class="text-muted">
+            1. 打开 Chrome 扩展管理页 <code>chrome://extensions</code><br>
+            2. 开启"开发者模式"<br>
+            3. 点击"加载已解压的扩展程序"，选择目录：<br>
+            <code style="word-break:break-all;">{{ ext_path }}</code><br>
+            4. 登录微信公众平台后，扩展会自动抓取凭证
+        </span>
+    </div>
+    {% endif %}
+</div>
+
+<!-- 下载触发 -->
+<div class="card">
+    <div class="card-title">下载触发</div>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;">手动触发各类数据下载任务</p>
+    <div class="btn-group">
+        <button class="btn btn-outline" onclick="triggerDownload('tendency')">趋势数据</button>
+        <button class="btn btn-outline" onclick="triggerDownload('user')">用户数据</button>
+        <button class="btn btn-outline" onclick="triggerDownload('menu')">菜单数据</button>
+        <button class="btn btn-outline" onclick="triggerDownload('msg')">消息数据</button>
+        <button class="btn btn-accent" onclick="triggerDownloadAll()">全部下载</button>
+    </div>
+    <div id="downloadStatus" class="mt-8" style="font-size:13px;"></div>
+</div>
+
+<!-- 文章列表管理 -->
+<div class="card">
+    <div class="card-title">文章列表管理</div>
+    <div class="btn-group mb-16">
+        <button class="btn btn-primary" onclick="fetchMsgids()">获取文章列表</button>
+    </div>
+    <div style="background:var(--surface-2,#f5f5f5);border:1px solid var(--border);border-radius:6px;padding:12px 16px;margin-bottom:16px;font-size:13px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--text-primary)">批量下载详情数据的正确方式：使用 Chrome 扩展</strong><br>
+        1. 在 Chrome 中打开微信公众号后台（mp.weixin.qq.com）<br>
+        2. 点击浏览器右上角的扩展图标，点击「批量下载详情」<br>
+        3. 扩展会自动逐篇打开详情页 → 点击「下载数据明细」→ 等待下载完成后关闭标签页<br>
+        4. 下载的 CSV 文件会被监控目录自动导入到数据库
+    </div>
+    <div id="msgidStatus" class="mb-16" style="font-size:13px;"></div>
+    <div class="table-wrapper">
+        <table id="tableMsgids">
+            <thead>
+                <tr>
+                    <th>MsgID</th>
+                    <th>标题</th>
+                    <th>发布日期</th>
+                    <th>详情状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if msgids %}
+                {% for m in msgids %}
+                <tr>
+                    <td class="td-num" style="font-family:var(--font-mono);font-size:12px;">{{ m.msgid }}</td>
+                    <td>{{ m.title or '-' }}</td>
+                    <td>{{ m.publish_date or '-' }}</td>
+                    <td>
+                        {% if m.detail_ready %}
+                        <span class="badge badge-accent">已下载</span>
+                        {% elif m.has_detail_snapshot %}
+                        <span class="badge badge-warning">待更新</span>
+                        {% else %}
+                        <span class="badge">未下载</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if m.publish_date and token %}
+                        <a href="https://mp.weixin.qq.com/misc/appmsganalysis?action=detailpage&msgid={{ m.msgid }}{% if '_' not in m.msgid %}_1{% endif %}&publish_date={{ m.publish_date|replace('/', '-') }}&type=int&pageVersion=1&token={{ token }}&lang=zh_CN"
+                           target="_blank" class="btn-text" style="font-size:12px;padding:4px 8px;">{{ '重新下载' if (m.detail_ready or m.has_detail_snapshot) else '去详情页' }}</a>
+                        {% else %}
+                        <span class="text-muted" style="font-size:12px;">需配置Token</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% else %}
+                <tr><td colspan="5" class="text-center text-muted">暂无文章列表，点击"获取文章列表"拉取</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function formatRequestError(err) {
+    const message = (err && err.message ? String(err.message) : '未知错误').trim();
+    if (/^请求失败[:：]/.test(message)) {
+        return message;
+    }
+    return '请求失败：' + message;
+}
+
+/* ── 下载触发 ────────────────────────────────────────────── */
+function triggerDownload(type) {
+    const statusEl = document.getElementById('downloadStatus');
+    statusEl.innerHTML = '<span class="text-muted">正在触发 ' + type + ' 下载...</span>';
+
+    fetch('/trigger-download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: type }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            statusEl.innerHTML = '<span class="text-danger">' + data.error + '</span>';
+        } else {
+            statusEl.innerHTML = '<span class="text-accent">' + (data.message || '已触发') + '</span>';
+        }
+    })
+    .catch(err => {
+        statusEl.innerHTML = '<span class="text-danger">' + escapeHtml(formatRequestError(err)) + '</span>';
+    });
+}
+
+function triggerDownloadAll() {
+    const statusEl = document.getElementById('downloadStatus');
+    statusEl.innerHTML = '<span class="text-muted">正在触发全部下载...</span>';
+
+    fetch('/trigger-download-all', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            statusEl.innerHTML = '<span class="text-danger">' + data.error + '</span>';
+        } else {
+            statusEl.innerHTML = '<span class="text-accent">' + (data.message || '全部已触发') + '</span>';
+        }
+    })
+    .catch(err => {
+        statusEl.innerHTML = '<span class="text-danger">' + escapeHtml(formatRequestError(err)) + '</span>';
+    });
+}
+
+/* ── 文章列表管理 ────────────────────────────────────────── */
+function fetchMsgids() {
+    const statusEl = document.getElementById('msgidStatus');
+    statusEl.innerHTML = '<span class="text-muted">正在获取文章列表...</span>';
+
+    fetch('/fetch-msgids', { method: 'POST' })
+    .then(async (r) => {
+        const raw = await r.text();
+        let data = {};
+        try {
+            data = raw ? JSON.parse(raw) : {};
+        } catch (_) {
+            throw new Error(raw || ('HTTP ' + r.status));
+        }
+        if (!r.ok) {
+            throw new Error(data.error || ('HTTP ' + r.status));
+        }
+        return data;
+    })
+    .then(data => {
+        if (data.error) {
+            statusEl.innerHTML = '<span class="text-danger">' + data.error + '</span>';
+        } else {
+            let html = '<span class="text-accent">已获取 ' + (data.count || 0) + ' 篇文章</span>';
+            if (data.missing_titles && data.missing_titles.length) {
+                const preview = data.missing_titles.slice(0, 3).map(item => escapeHtml(item.title)).join('；');
+                html += '<br><span class="text-danger">注意：微信文章列表未返回 '
+                    + data.missing_titles.length + ' 篇主档文章'
+                    + (preview ? '：' + preview : '')
+                    + '</span>';
+            }
+            statusEl.innerHTML = html;
+            if (data.msgids && data.msgids.length) {
+                renderMsgids(data.msgids);
+            } else {
+                setTimeout(() => location.reload(), 800);
+            }
+        }
+    })
+    .catch(err => {
+        statusEl.innerHTML = '<span class="text-danger">' + escapeHtml(formatRequestError(err)) + '</span>';
+    });
+}
+
+
+function renderMsgids(list) {
+    const tbody = document.querySelector('#tableMsgids tbody');
+    const token = '{{ token or "" }}';
+    if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">暂无文章</td></tr>';
+        return;
+    }
+    tbody.innerHTML = list.map(function(m) {
+        const detailReady = Boolean(m.detail_ready);
+        const hasDetailSnapshot = Boolean(m.has_detail_snapshot);
+        const badge = detailReady
+            ? '<span class="badge badge-accent">已下载</span>'
+            : (hasDetailSnapshot
+                ? '<span class="badge badge-warning">待更新</span>'
+                : '<span class="badge">未下载</span>');
+        let action = '<span class="text-muted" style="font-size:12px;">—</span>';
+        if (m.publish_date && token) {
+            const wxMsgid = m.msgid.includes('_') ? m.msgid : m.msgid + '_1';
+            const pubDate = (m.publish_date || '').replace(/\//g, '-');
+            const url = 'https://mp.weixin.qq.com/misc/appmsganalysis?action=detailpage&msgid='
+                + wxMsgid + '&publish_date=' + encodeURIComponent(pubDate)
+                + '&type=int&pageVersion=1&token=' + token + '&lang=zh_CN';
+            action = '<a href="' + url + '" target="_blank" class="btn-text" style="font-size:12px;padding:4px 8px;">'
+                + ((detailReady || hasDetailSnapshot) ? '重新下载' : '去详情页')
+                + '</a>';
+        }
+        return '<tr>' +
+            '<td class="td-num" style="font-family:var(--font-mono);font-size:12px;">' + escapeHtml(String(m.msgid)) + '</td>' +
+            '<td>' + escapeHtml(m.title || '-') + '</td>' +
+            '<td>' + escapeHtml(m.publish_date || '-') + '</td>' +
+            '<td>' + badge + '</td>' +
+            '<td>' + action + '</td>' +
+        '</tr>';
+    }).join('');
+}
+
+function escapeHtml(s) {
+    var div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}数据总览 — 公众号管理平台{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2 class="page-title">数据总览</h2>
+        <div class="page-subtitle">总览、导入和导入历史都收在这一页</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;">
+        <button class="btn btn-primary" id="syncReadsBtn" onclick="syncReads()">同步文章阅读数</button>
+        <a class="btn btn-outline" href="/export/db">导出数据库</a>
+        <a class="btn btn-outline" href="/export/daily.csv">导出阅读数据CSV</a>
+        <button class="btn btn-outline" onclick="_panelToggle()">自定义面板</button>
+    </div>
+</div>
+
+<!-- freshness -->
+<div class="freshness-row" id="freshnessRow"></div>
+
+<!-- stats -->
+<div class="stats-row">
+    <div class="stat-box"><div class="stat-value">{{ summary.total_reads_30d|default(0) }}</div><div class="stat-label">30日阅读</div></div>
+    <div class="stat-box"><div class="stat-value">{{ summary.total_articles_30d|default(0) }}</div><div class="stat-label">发文篇数</div></div>
+    <div class="stat-box"><div class="stat-value">{{ summary.avg_share_30d|default(0) }}</div><div class="stat-label">日均转发</div></div>
+    <div class="stat-box"><div class="stat-value">{{ summary.net_user_30d|default(0) }}</div><div class="stat-label">净增粉丝</div></div>
+    <div class="stat-box"><div class="stat-value">{{ summary.import_count|default(0) }}</div><div class="stat-label">导入次数</div></div>
+</div>
+
+<!-- import form -->
+<div data-panel="import" class="card">
+    <div class="card-title">数据导入</div>
+    <form action="/import" method="POST" enctype="multipart/form-data" style="display:flex;gap:12px;align-items:center">
+        <input type="file" name="xls_file" accept=".xls,.xlsx" class="form-input" style="width:auto">
+        <button type="submit" class="btn btn-primary">导入</button>
+        <button type="button" class="btn btn-outline" onclick="scanNow()">扫描下载目录</button>
+    </form>
+</div>
+
+<div data-panel="history" class="card">
+    <div class="card-title">导入历史</div>
+    <div class="table-wrapper">
+        <table id="tableImports">
+            <thead><tr><th>文件名</th><th>日期范围</th><th>行数</th><th>时间</th><th>操作</th></tr></thead>
+            <tbody>
+            {% for imp in imports %}
+            <tr data-import-id="{{ imp.id }}">
+                <td>{{ imp.filename }}</td>
+                <td>{{ imp.date_range }}</td>
+                <td class="td-num">{{ imp.rows_imported }}</td>
+                <td>{{ imp.imported_at }}</td>
+                <td><button class="btn-danger" onclick='deleteImport({{ imp.id }}, {{ imp.filename|tojson }})'>删除</button></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="empty-state">暂无导入记录</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str || '';
+        return div.innerHTML;
+    }
+
+    /* ── 数据新鲜度 ──────────────────────────────────────────────────────────── */
+    fetch('/api/freshness').then(r => r.json()).then(data => {
+        const row = document.getElementById('freshnessRow');
+        if (!data || !data.length) {
+            row.innerHTML = '<span class="text-muted" style="font-size:12px;">暂无新鲜度数据</span>';
+            return;
+        }
+        const now = new Date();
+        row.innerHTML = data.map(item => {
+            const lastDate = new Date(item.last_update);
+            const diffDays = Math.floor((now - lastDate) / (1000 * 60 * 60 * 24));
+            const staleClass = diffDays > 2 ? ' stale' : '';
+            return '<div class="freshness-item' + staleClass + '">' +
+                   escapeHtml(item.source) + '：' + escapeHtml(item.last_update) +
+                   (diffDays > 2 ? ' (已过期)' : '') +
+                   '</div>';
+        }).join('');
+    }).catch(() => {
+        document.getElementById('freshnessRow').innerHTML =
+            '<span class="text-muted" style="font-size:12px;">新鲜度数据加载失败</span>';
+    });
+
+    /* ── 扫描下载目录 ─────────────────────────────────────────────────────────── */
+    window.scanNow = function() {
+        fetch('/api/scan-now', { method: 'POST' })
+            .then(r => r.json())
+            .then(d => {
+                alert(d.count + ' 个文件已处理');
+                location.reload();
+            })
+            .catch(() => alert('扫描请求失败'));
+    };
+
+    window.syncReads = function() {
+        const btn = document.getElementById('syncReadsBtn');
+        btn.disabled = true;
+        btn.textContent = '同步中...';
+        fetch('/api/sync-reads', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                alert('同步完成：更新来源表 ' + data.updated_source + ' 条，更新详情表 ' + data.updated_detail + ' 条');
+            })
+            .catch(err => alert('同步失败: ' + err.message))
+            .finally(() => {
+                btn.disabled = false;
+                btn.textContent = '同步文章阅读数';
+            });
+    };
+
+})();
+
+function deleteImport(importId, filename) {
+    const confirmed = confirm('确定要删除导入记录「' + filename + '」及其关联数据吗？\n\n此操作不可撤销！');
+    if (!confirmed) return;
+
+    fetch('/api/delete-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: filename }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            alert('删除失败: ' + data.error);
+        } else {
+            alert('已删除导入记录及 ' + (data.deleted || 0) + ' 条关联数据');
+            const row = document.querySelector('tr[data-import-id="' + importId + '"]');
+            if (row) row.remove();
+            const tbody = document.querySelector('#tableImports tbody');
+            if (!tbody.querySelector('tr')) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">暂无导入记录</td></tr>';
+            }
+        }
+    })
+    .catch(err => alert('请求失败: ' + err.message));
+}
+
+PanelManager.init('dashboard', [
+    { id: 'import',  label: '数据导入',        defaultVisible: true },
+    { id: 'history', label: '导入历史', defaultVisible: true },
+]);
+</script>
+{% endblock %}

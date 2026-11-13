@@ -1,0 +1,15 @@
+大工人 50 n
+大工 50 n
+大连理工 10 n
+大连理工大学 10 nt
+Duter 5 n
+duter 5 n
+Clawdbot 5 n
+OpenClaw 5 n
+报录比 5 n
+保研 5 n
+脱单 5 n
+选课 5 n
+微积分 5 n
+培养方案 5 n
+生活费 5 n

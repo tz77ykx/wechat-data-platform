@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% set article = detail.article %}
+{% block title %}{{ article.canonical_title if article else '文章详情' }} — 标准主档{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <a href="/master" class="btn btn-text" style="padding-left:0;margin-bottom:4px;">&larr; 返回标准主档</a>
+        <h2 class="page-title">{{ article.canonical_title if article else '文章详情' }}</h2>
+        <div class="page-subtitle">标准主档中的单篇真相页</div>
+    </div>
+</div>
+
+{% if article %}
+<div class="stats-row">
+    <div class="stat-box">
+        <div class="stat-value">{{ article.total_reads or 0 }}</div>
+        <div class="stat-label">总阅读</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ article.share_user if article.share_user is not none else '—' }}</div>
+        <div class="stat-label">分享</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ article.thumbup_user if article.thumbup_user is not none else '—' }}</div>
+        <div class="stat-label">点赞</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ article.like_user if article.like_user is not none else '—' }}</div>
+        <div class="stat-label">在看</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ article.fav_user if article.fav_user is not none else '—' }}</div>
+        <div class="stat-label">收藏</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ article.comment_count if article.comment_count is not none else '—' }}</div>
+        <div class="stat-label">留言</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ article.avg_read_time if article.avg_read_time is not none else '—' }}</div>
+        <div class="stat-label">停留时长</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ article.complete_rate if article.complete_rate is not none else '—' }}</div>
+        <div class="stat-label">完读率</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ article.rec_ratio if article.rec_ratio is not none else '—' }}</div>
+        <div class="stat-label">推荐占比</div>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom:16px;">
+    <div class="card-title">基础信息</div>
+    <div class="table-wrap">
+        <table class="table">
+            <tbody>
+                <tr><th>标题</th><td>{{ article.canonical_title }}</td><th>发布时间</th><td>{{ article.publish_date or '—' }}</td></tr>
+                <tr><th>送达人数</th><td>{{ article.deliver_user if article.deliver_user is not none else '—' }}</td><th>消息阅读</th><td>{{ article.msg_read_user if article.msg_read_user is not none else '—' }}</td></tr>
+                <tr><th>首次分享</th><td>{{ article.first_share_user if article.first_share_user is not none else '—' }}</td><th>总分享人数</th><td>{{ article.total_share_user if article.total_share_user is not none else '—' }}</td></tr>
+                <tr><th>分享带来阅读</th><td>{{ article.share_read_user if article.share_read_user is not none else '—' }}</td><th>人工修正</th><td>{{ '是' if article.is_overridden else '否' }}</td></tr>
+                <tr><th>推荐阅读</th><td>{{ article.rec_reads or 0 }}</td><th>打开率</th><td>{{ article.open_rate if article.open_rate is not none else '—' }}</td></tr>
+                <tr><th>最近更新</th><td colspan="3">{{ article.updated_at or '—' }}</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom:16px;">
+    <div class="card-title">来源证据</div>
+    {% if detail.sources %}
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>发布日期</th>
+                    <th>渠道</th>
+                    <th class="td-num">阅读</th>
+                    <th class="td-num">占比</th>
+                    <th>来源文件</th>
+                    <th>更新时间</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in detail.sources %}
+                <tr>
+                    <td>{{ row.publish_date or '—' }}</td>
+                    <td>{{ row.channel }}</td>
+                    <td class="td-num">{{ row.read_user or 0 }}</td>
+                    <td class="td-num">{{ row.read_ratio if row.read_ratio is not none else '—' }}</td>
+                    <td>{{ row.import_file or '—' }}</td>
+                    <td>{{ row.updated_at or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">这篇文章还没有来源证据记录。</div>
+    {% endif %}
+</div>
+
+<div class="card" style="margin-bottom:16px;">
+    <div class="card-title">人工修正</div>
+    <form method="POST" style="display:grid;grid-template-columns: 1fr 1fr 2fr auto;gap:10px;align-items:end;">
+        <input type="hidden" name="action" value="save">
+        <div>
+            <label>字段</label>
+            <select class="input" name="field_name" required>
+                {% for field in editable_fields %}
+                <option value="{{ field }}">{{ field }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label>值</label>
+            <input class="input" type="text" name="value" required>
+        </div>
+        <div>
+            <label>原因</label>
+            <input class="input" type="text" name="reason" placeholder="为什么要人工覆盖">
+        </div>
+        <button class="btn btn-primary" type="submit">保存覆盖</button>
+    </form>
+
+    {% if detail.overrides %}
+    <div class="table-wrap" style="margin-top:16px;">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>字段</th>
+                    <th>覆盖值</th>
+                    <th>原因</th>
+                    <th>更新时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in detail.overrides %}
+                <tr>
+                    <td>{{ row.field_name }}</td>
+                    <td>{{ row.override_value }}</td>
+                    <td>{{ row.reason or '—' }}</td>
+                    <td>{{ row.updated_at }}</td>
+                    <td>
+                        <form method="POST">
+                            <input type="hidden" name="action" value="clear">
+                            <input type="hidden" name="field_name" value="{{ row.field_name }}">
+                            <button class="btn btn-secondary" type="submit">恢复自动</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state" style="margin-top:16px;">这篇文章还没有人工修正记录。</div>
+    {% endif %}
+</div>
+{% else %}
+<div class="card">
+    <div class="empty-state">没有找到这篇文章。</div>
+</div>
+{% endif %}
+{% endblock %}

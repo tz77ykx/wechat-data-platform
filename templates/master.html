@@ -1,0 +1,580 @@
+{% extends "base.html" %}
+{% block title %}标准主档 — 公众号管理平台{% endblock %}
+
+{% block head %}
+<style>
+    .search-bar {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+    thead th.sortable { cursor: pointer; user-select: none; }
+    thead th.sortable:after { content: ' \2195'; font-size: 10px; color: var(--text-muted); }
+    thead th.sort-asc:after { content: ' \2191'; color: var(--text); }
+    thead th.sort-desc:after { content: ' \2193'; color: var(--text); }
+    .editable-cell { cursor: pointer; }
+    .editable-cell:hover .cell-val { text-decoration: underline dotted; }
+    .reads-input {
+        width: 88px;
+        font-size: 13px;
+        text-align: right;
+        padding: 1px 4px;
+        border: 1px solid var(--primary);
+        border-radius: 4px;
+        outline: none;
+    }
+    .badge {
+        display: inline-block;
+        font-size: 11px;
+        padding: 1px 6px;
+        border-radius: 4px;
+        border: 1px solid;
+        margin-left: 4px;
+        vertical-align: middle;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2 class="page-title">标准主档</h2>
+        <div class="page-subtitle">一个号，一套库，一个总入口</div>
+    </div>
+    <form action="/master/bootstrap" method="POST">
+        <button class="btn btn-primary" type="submit">初始化 / 重建主档</button>
+    </form>
+</div>
+
+<div class="stats-row">
+    <div class="stat-box">
+        <div class="stat-value">{{ summary.article_count or 0 }}</div>
+        <div class="stat-label">文章总数</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ summary.total_reads or 0 }}</div>
+        <div class="stat-label">总阅读量</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ summary.recent_articles or 0 }}</div>
+        <div class="stat-label">近30天发文</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ pending|length }}</div>
+        <div class="stat-label">待确认异常</div>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom:16px;">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <a class="btn {% if tab == 'articles' %}btn-primary{% else %}btn-secondary{% endif %}" href="/master?tab=articles">文章总表</a>
+        <a class="btn {% if tab == 'diagnostics' %}btn-primary{% else %}btn-secondary{% endif %}" href="/master?tab=diagnostics">文章诊断</a>
+        <a class="btn {% if tab == 'trends' %}btn-primary{% else %}btn-secondary{% endif %}" href="/master?tab=trends">账号趋势</a>
+        <a class="btn {% if tab == 'users' %}btn-primary{% else %}btn-secondary{% endif %}" href="/master?tab=users">用户</a>
+        <a class="btn {% if tab == 'menu' %}btn-primary{% else %}btn-secondary{% endif %}" href="/master?tab=menu">菜单</a>
+        <a class="btn {% if tab == 'messages' %}btn-primary{% else %}btn-secondary{% endif %}" href="/master?tab=messages">消息</a>
+    </div>
+</div>
+
+{% if tab == 'articles' %}
+<div class="card" style="margin-bottom:16px;">
+    <form method="GET" action="/master" class="search-bar">
+        <input type="hidden" name="tab" value="articles">
+        <input class="input" id="masterSearchInput" type="text" name="q" value="{{ q }}" placeholder="搜索标题">
+        <select class="input" name="order">
+            <option value="latest" {% if order == 'latest' %}selected{% endif %}>按最新发布</option>
+            <option value="reads" {% if order == 'reads' %}selected{% endif %}>按阅读最高</option>
+        </select>
+        <select class="input" name="overridden">
+            <option value="" {% if not overridden %}selected{% endif %}>全部</option>
+            <option value="1" {% if overridden == '1' %}selected{% endif %}>仅看人工修正</option>
+            <option value="0" {% if overridden == '0' %}selected{% endif %}>仅看自动值</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" name="recent" value="1" {% if recent_only %}checked{% endif %}>
+            仅看最近30天
+        </label>
+        <button class="btn btn-secondary" type="submit">筛选</button>
+        <a href="/export/articles.csv" class="btn btn-secondary">导出 CSV</a>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-title">文章总表</div>
+    <div id="masterStaleBanner" class="alert alert-warning" style="display:none;margin-bottom:16px;"></div>
+    {% if articles %}
+    <div class="table-wrap">
+        <table class="table" id="masterArticlesTable">
+            <thead>
+                <tr>
+                    <th class="sortable" data-key="publish_date" data-type="string">日期</th>
+                    <th class="sortable" data-key="canonical_title" data-type="string">标题</th>
+                    <th class="sortable td-num" data-key="total_reads" data-type="number">阅读量</th>
+                    <th class="sortable td-num" data-key="rec_pct" data-type="number">推荐占比</th>
+                    <th class="sortable td-num" data-key="share_user" data-type="number">转发</th>
+                    <th class="sortable td-num" data-key="thumbup_user" data-type="number">点赞</th>
+                    <th class="sortable td-num" data-key="like_user" data-type="number">在看</th>
+                    <th class="sortable td-num" data-key="fav_user" data-type="number">收藏</th>
+                    <th class="sortable td-num" data-key="complete_rate_pct" data-type="number">完读率</th>
+                    <th class="sortable td-num" data-key="avg_read_time" data-type="number">均读时长</th>
+                    <th class="sortable td-num" data-key="follow_after_read" data-type="number">阅读后关注</th>
+                    <th>人工修正</th>
+                    <th>最近更新</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="masterArticlesBody"></tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">主档里还没有文章。先点上面的“初始化 / 重建主档”。</div>
+    {% endif %}
+</div>
+{% elif tab == 'diagnostics' %}
+<div class="card">
+    <div class="card-title">文章诊断</div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>标题</th>
+                    <th>发布时间</th>
+                    <th class="td-num">总阅读</th>
+                    <th class="td-num">停留时长</th>
+                    <th class="td-num">完读率</th>
+                    <th class="td-num">推荐阅读</th>
+                    <th class="td-num">推荐占比</th>
+                    <th class="td-num">打开率</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in diagnostics %}
+                <tr>
+                    <td><a href="/master/article/{{ row.id }}">{{ row.canonical_title }}</a></td>
+                    <td>{{ row.publish_date or '—' }}</td>
+                    <td class="td-num">{{ row.total_reads or 0 }}</td>
+                    <td class="td-num">{{ row.avg_read_time if row.avg_read_time is not none else '—' }}</td>
+                    <td class="td-num">{{ row.complete_rate if row.complete_rate is not none else '—' }}</td>
+                    <td class="td-num">{{ row.rec_reads or 0 }}</td>
+                    <td class="td-num">{{ row.rec_ratio if row.rec_ratio is not none else '—' }}</td>
+                    <td class="td-num">{{ row.open_rate if row.open_rate is not none else '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% elif tab == 'trends' %}
+<div class="card">
+    <div class="card-title">账号趋势</div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>日期</th>
+                    <th class="td-num">总阅读</th>
+                    <th class="td-num">分享</th>
+                    <th class="td-num">原文阅读</th>
+                    <th class="td-num">收藏</th>
+                    <th class="td-num">发文数</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in daily_metrics %}
+                <tr>
+                    <td>{{ row.stat_date }}</td>
+                    <td class="td-num">{{ row.total_read_user or 0 }}</td>
+                    <td class="td-num">{{ row.share_user or 0 }}</td>
+                    <td class="td-num">{{ row.original_read_user or 0 }}</td>
+                    <td class="td-num">{{ row.fav_user or 0 }}</td>
+                    <td class="td-num">{{ row.article_count or 0 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% elif tab == 'users' %}
+<div class="card">
+    <div class="card-title">用户历史</div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>日期</th>
+                    <th class="td-num">新关注</th>
+                    <th class="td-num">取消关注</th>
+                    <th class="td-num">净增</th>
+                    <th class="td-num">总关注</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in users %}
+                <tr>
+                    <td>{{ row.stat_date }}</td>
+                    <td class="td-num">{{ row.new_user or 0 }}</td>
+                    <td class="td-num">{{ row.cancel_user or 0 }}</td>
+                    <td class="td-num">{{ row.net_user or 0 }}</td>
+                    <td class="td-num">{{ row.total_user or 0 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% elif tab == 'menu' %}
+<div class="card">
+    <div class="card-title">菜单历史</div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>版本</th>
+                    <th>一级菜单</th>
+                    <th>二级菜单</th>
+                    <th class="td-num">点击次数</th>
+                    <th class="td-num">点击人数</th>
+                    <th class="td-num">人均点击</th>
+                    <th>导入日期</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in menus %}
+                <tr>
+                    <td>{{ row.menu_version }}</td>
+                    <td>{{ row.menu_level1 }}</td>
+                    <td>{{ row.menu_level2 }}</td>
+                    <td class="td-num">{{ row.click_count or 0 }}</td>
+                    <td class="td-num">{{ row.click_user or 0 }}</td>
+                    <td class="td-num">{{ row.avg_click or 0 }}</td>
+                    <td>{{ row.import_date or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="card">
+    <div class="card-title">消息历史</div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>日期</th>
+                    <th class="td-num">消息人数</th>
+                    <th class="td-num">消息次数</th>
+                    <th class="td-num">人均消息</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in messages %}
+                <tr>
+                    <td>{{ row.stat_date }}</td>
+                    <td class="td-num">{{ row.msg_user or 0 }}</td>
+                    <td class="td-num">{{ row.msg_count or 0 }}</td>
+                    <td class="td-num">{{ row.avg_msg or 0 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% if pending %}
+<div class="card" style="margin-top:16px;">
+    <div class="card-title">待确认异常</div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>来源文件</th>
+                    <th>记录类型</th>
+                    <th>文章提示</th>
+                    <th>问题类型</th>
+                    <th>说明</th>
+                    <th>状态</th>
+                    <th>处理</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in pending %}
+                <tr>
+                    <td>{{ row.source_file or '—' }}</td>
+                    <td>{{ row.record_type or '—' }}</td>
+                    <td>{{ row.article_hint or '—' }}</td>
+                    <td>{{ row.issue_type }}</td>
+                    <td>{{ row.issue_message }}</td>
+                    <td>{{ row.status }}</td>
+                    <td>
+                        <div style="display:grid;gap:8px;min-width:260px;">
+                            <form method="POST" action="/master/pending/{{ row.id }}" style="display:flex;gap:6px;">
+                                <input type="hidden" name="action" value="ignore">
+                                <button class="btn btn-secondary" type="submit">忽略</button>
+                            </form>
+                            <form method="POST" action="/master/pending/{{ row.id }}" style="display:flex;gap:6px;">
+                                <input type="hidden" name="action" value="done">
+                                <button class="btn btn-secondary" type="submit">标记已处理</button>
+                            </form>
+                            <form method="POST" action="/master/pending/{{ row.id }}" style="display:flex;gap:6px;flex-wrap:wrap;">
+                                <input type="hidden" name="action" value="associate">
+                                <input class="input" type="number" name="article_id" placeholder="文章 ID" style="width:100px;">
+                                <button class="btn btn-secondary" type="submit">关联文章</button>
+                            </form>
+                            <form method="POST" action="/master/pending/{{ row.id }}" style="display:flex;gap:6px;flex-wrap:wrap;">
+                                <input type="hidden" name="action" value="create">
+                                <input class="input" type="text" name="title" placeholder="新文章标题" style="min-width:160px;">
+                                <input class="input" type="text" name="publish_date" placeholder="YYYY-MM-DD" style="width:120px;">
+                                <button class="btn btn-secondary" type="submit">新建文章</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if tab == 'articles' and articles is defined %}
+<script>
+(function() {
+    const rawData = {{ articles|tojson }};
+    let tableData = [...rawData];
+    let sortKey = {{ ('"publish_date"' if order == 'latest' else '"total_reads"')|safe }};
+    let sortDir = 'desc';
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str || '';
+        return div.innerHTML;
+    }
+
+    function formatNumber(val) {
+        return val != null && val !== '' ? Number(val).toLocaleString() : '-';
+    }
+
+    function formatPercent(val) {
+        return val != null && val !== '' ? val + '%' : '-';
+    }
+
+    function formatSeconds(val) {
+        return val != null && val !== '' ? val + 's' : '-';
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('masterArticlesBody');
+        if (!tbody) return;
+        if (!tableData.length) {
+            tbody.innerHTML = '<tr><td colspan="13" class="empty-state">暂无数据</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = tableData.map(art => {
+            const title = escapeHtml(art.canonical_title || '');
+            const staleTag = art.stale
+                ? ' <span class="badge badge-warning" title="阅读数未被最新数据文件覆盖，可能偏低">数据旧</span>'
+                : '';
+            const readsDisplay = formatNumber(art.total_reads || 0) + staleTag;
+
+            return '<tr>' +
+                '<td class="editable-cell" data-title="' + title + '" data-field="publish_date" data-raw="' + escapeHtml(art.publish_date || '') + '"><span class="cell-val">' + escapeHtml(art.publish_date || '—') + '</span></td>' +
+                '<td><a class="table-link" href="/master/article/' + art.id + '">' + title + '</a></td>' +
+                '<td class="td-num editable-cell" data-title="' + title + '" data-field="total_reads" data-raw="' + (art.total_reads || 0) + '"><span class="cell-val">' + readsDisplay + '</span></td>' +
+                '<td class="td-num editable-cell" data-title="' + title + '" data-field="rec_pct" data-raw="' + (art.rec_pct ?? '') + '"><span class="cell-val">' + formatPercent(art.rec_pct) + '</span></td>' +
+                '<td class="td-num editable-cell" data-title="' + title + '" data-field="share_user" data-raw="' + (art.share_user ?? '') + '"><span class="cell-val">' + formatNumber(art.share_user) + '</span></td>' +
+                '<td class="td-num editable-cell" data-title="' + title + '" data-field="thumbup_user" data-raw="' + (art.thumbup_user ?? '') + '"><span class="cell-val">' + formatNumber(art.thumbup_user) + '</span></td>' +
+                '<td class="td-num editable-cell" data-title="' + title + '" data-field="like_user" data-raw="' + (art.like_user ?? '') + '"><span class="cell-val">' + formatNumber(art.like_user) + '</span></td>' +
+                '<td class="td-num editable-cell" data-title="' + title + '" data-field="fav_user" data-raw="' + (art.fav_user ?? '') + '"><span class="cell-val">' + formatNumber(art.fav_user) + '</span></td>' +
+                '<td class="td-num editable-cell" data-title="' + title + '" data-field="complete_rate" data-raw="' + (art.complete_rate_pct ?? '') + '"><span class="cell-val">' + formatPercent(art.complete_rate_pct) + '</span></td>' +
+                '<td class="td-num editable-cell" data-title="' + title + '" data-field="avg_read_time" data-raw="' + (art.avg_read_time ?? '') + '"><span class="cell-val">' + formatSeconds(art.avg_read_time) + '</span></td>' +
+                '<td class="td-num">' + formatNumber(art.follow_after_read) + '</td>' +
+                '<td>' + (art.is_overridden ? '是' : '否') + '</td>' +
+                '<td>' + escapeHtml(art.updated_at || '—') + '</td>' +
+                '<td><a class="btn btn-text" href="/master/article/' + art.id + '">查看详情</a></td>' +
+            '</tr>';
+        }).join('');
+    }
+
+    function updateSortHeaders() {
+        document.querySelectorAll('#masterArticlesTable thead th.sortable').forEach(th => {
+            th.classList.remove('sort-asc', 'sort-desc');
+            if (th.dataset.key === sortKey) {
+                th.classList.add(sortDir === 'desc' ? 'sort-desc' : 'sort-asc');
+            }
+        });
+    }
+
+    function applySort() {
+        tableData.sort((a, b) => {
+            let va = a[sortKey];
+            let vb = b[sortKey];
+            if (typeof va === 'string' || typeof vb === 'string') {
+                va = va || '';
+                vb = vb || '';
+                const cmp = String(va).localeCompare(String(vb), 'zh');
+                return sortDir === 'asc' ? cmp : -cmp;
+            }
+            va = va || 0;
+            vb = vb || 0;
+            return sortDir === 'asc' ? va - vb : vb - va;
+        });
+        renderTable();
+        updateSortHeaders();
+    }
+
+    function applySearch() {
+        const input = document.getElementById('masterSearchInput');
+        const q = (input?.value || '').trim().toLowerCase();
+        tableData = rawData.filter(art => !q || (art.canonical_title || '').toLowerCase().includes(q));
+        applySort();
+    }
+
+    function renderStaleBanner() {
+        const banner = document.getElementById('masterStaleBanner');
+        if (!banner) return;
+        const staleItems = rawData.filter(a => a.stale);
+        if (!staleItems.length) {
+            banner.style.display = 'none';
+            return;
+        }
+        const sinceDate = staleItems[0].stale_since || '';
+        banner.style.display = '';
+        banner.innerHTML =
+            '<strong>注意：</strong>' + staleItems.length + ' 篇文章的阅读数未被最新数据文件覆盖' +
+            (sinceDate ? '（最新文件仅覆盖 ' + escapeHtml(sinceDate) + ' 以后）' : '') + '。';
+    }
+
+    function initInlineEdit() {
+        const tbody = document.getElementById('masterArticlesBody');
+        if (!tbody) return;
+
+        const fieldFormat = {
+            total_reads: v => formatNumber(v),
+            publish_date: v => v || '-',
+            rec_pct: v => formatPercent(v),
+            share_user: v => formatNumber(v),
+            thumbup_user: v => formatNumber(v),
+            like_user: v => formatNumber(v),
+            fav_user: v => formatNumber(v),
+            complete_rate: v => formatPercent(v),
+            avg_read_time: v => formatSeconds(v),
+        };
+        const fieldInputType = { publish_date: 'date' };
+
+        tbody.addEventListener('click', (e) => {
+            const cell = e.target.closest('.editable-cell');
+            if (!cell || cell.querySelector('input')) return;
+
+            const title = cell.dataset.title;
+            const field = cell.dataset.field;
+            const currentRaw = cell.dataset.raw;
+            const span = cell.querySelector('.cell-val');
+            const badge = cell.querySelector('.badge');
+
+            const input = document.createElement('input');
+            input.type = fieldInputType[field] || 'number';
+            input.className = 'reads-input';
+            input.value = currentRaw;
+            if (input.type === 'number') input.min = 0;
+            if (field === 'complete_rate') { input.min = 0; input.max = 100; input.step = 0.1; }
+
+            span.replaceWith(input);
+            if (badge) badge.style.display = 'none';
+            input.focus();
+            input.select();
+
+            function cancel() {
+                const newSpan = document.createElement('span');
+                newSpan.className = 'cell-val';
+                newSpan.innerHTML = (fieldFormat[field] || (v => v))(currentRaw);
+                input.replaceWith(newSpan);
+                if (badge) badge.style.display = '';
+            }
+
+            function save() {
+                const newVal = input.value.trim();
+                if (newVal === currentRaw) {
+                    cancel();
+                    return;
+                }
+
+                fetch('/api/article-field/' + encodeURIComponent(title), {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ field, value: newVal }),
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.ok) {
+                        alert('保存失败: ' + data.error);
+                        cancel();
+                        return;
+                    }
+
+                    cell.dataset.raw = newVal;
+                    const newSpan = document.createElement('span');
+                    newSpan.className = 'cell-val';
+                    newSpan.innerHTML = (fieldFormat[field] || (v => v))(newVal);
+                    input.replaceWith(newSpan);
+                    if (badge) badge.style.display = '';
+
+                    const art = rawData.find(a => a.canonical_title === title);
+                    if (art) {
+                        if (field === 'total_reads') art.total_reads = parseInt(newVal || 0, 10);
+                        else if (field === 'complete_rate') art.complete_rate_pct = parseFloat(newVal || 0);
+                        else if (field === 'rec_pct') art.rec_pct = parseFloat(newVal || 0);
+                        else if (field === 'avg_read_time') art.avg_read_time = parseInt(newVal || 0, 10);
+                        else if (field === 'publish_date') art.publish_date = newVal;
+                        else if (field in art) art[field] = newVal === '' ? null : parseInt(newVal || 0, 10);
+                    }
+                })
+                .catch(() => {
+                    alert('请求失败');
+                    cancel();
+                });
+            }
+
+            input.addEventListener('keydown', (evt) => {
+                if (evt.key === 'Enter') {
+                    evt.preventDefault();
+                    save();
+                }
+                if (evt.key === 'Escape') {
+                    cancel();
+                }
+            });
+            input.addEventListener('blur', save);
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const searchInput = document.getElementById('masterSearchInput');
+        searchInput?.addEventListener('input', applySearch);
+
+        document.getElementById('masterArticlesTable')?.querySelector('thead')?.addEventListener('click', (e) => {
+            const th = e.target.closest('th.sortable');
+            if (!th) return;
+            const key = th.dataset.key;
+            if (sortKey === key) {
+                sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+            } else {
+                sortKey = key;
+                sortDir = th.dataset.type === 'string' ? 'asc' : 'desc';
+            }
+            applySort();
+        });
+
+        renderStaleBanner();
+        initInlineEdit();
+        applySort();
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

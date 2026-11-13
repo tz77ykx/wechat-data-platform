@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — 公众号管理平台{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <a href="/articles" class="btn btn-text" style="padding-left:0;margin-bottom:4px;">&larr; 返回文章排行</a>
+        <h2 class="page-title">{{ title }}</h2>
+        {% if detail.publish_date %}
+        <div class="page-subtitle">发布日期：{{ detail.publish_date }}</div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- stats row -->
+<div class="stats-row">
+    <div class="stat-box">
+        <div class="stat-value">{{ detail.read_user|default(0) }}</div>
+        <div class="stat-label">阅读人数</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ detail.avg_read_time|default(0) }}s</div>
+        <div class="stat-label">平均阅读时长</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ detail.complete_rate|default(0) }}%</div>
+        <div class="stat-label">完读率</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ detail.share_user|default(0) }}</div>
+        <div class="stat-label">转发</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ detail.thumbup_user|default(0) }}</div>
+        <div class="stat-label">点赞</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ detail.like_user|default(0) }}</div>
+        <div class="stat-label">在看</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ detail.fav_user|default(0) }}</div>
+        <div class="stat-label">收藏</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ detail.comment_count|default(0) }}</div>
+        <div class="stat-label">评论</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-value">{{ detail.follow_after_read|default(0) }}</div>
+        <div class="stat-label">读后关注</div>
+    </div>
+</div>
+
+<!-- daily trend by channel -->
+<div class="card">
+    <div class="card-title">每日阅读趋势</div>
+    <div class="chart-box"><canvas id="trendChart"></canvas></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    const trendData = {{ trend|tojson }};
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!trendData || !trendData.length) return;
+
+        // Group by channel
+        const channelMap = {};
+        const dateSet = new Set();
+        trendData.forEach(row => {
+            dateSet.add(row.stat_date);
+            const ch = row.channel || '未知';
+            if (!channelMap[ch]) channelMap[ch] = {};
+            channelMap[ch][row.stat_date] = (channelMap[ch][row.stat_date] || 0) + (row.read_user || 0);
+        });
+
+        const dates = Array.from(dateSet).sort();
+        const channelNames = Object.keys(channelMap);
+
+        const datasets = channelNames.map((name, i) => ({
+            label: name,
+            data: dates.map(d => channelMap[name][d] || 0),
+        }));
+
+        ZJ.lineChart(
+            document.getElementById('trendChart'),
+            dates,
+            datasets
+        );
+    });
+})();
+</script>
+{% endblock %}

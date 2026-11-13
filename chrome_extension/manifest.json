@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "公众号助手",
+  "version": "1.4",
+  "description": "凭证同步 + 批量下载文章详情数据",
+  "permissions": [
+    "cookies",
+    "webRequest",
+    "storage",
+    "tabs",
+    "downloads",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://mp.weixin.qq.com/*",
+    "http://localhost:5001/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "公众号助手"
+  }
+}

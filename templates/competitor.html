@@ -1,0 +1,547 @@
+{% extends "base.html" %}
+{% block title %}对标分析 — 公众号管理平台{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>对标账号分析</h2>
+    <p class="page-desc">导入对标账号数据 → 发现爆文规律 → 评估移植可行性</p>
+</div>
+
+<!-- 导入栏 -->
+<div class="card" style="margin-bottom:20px">
+    <div class="card-body competitor-toolbar">
+        <label class="btn btn-outline" style="cursor:pointer;margin:0">
+            整理并导入 CSV
+            <input type="file" id="csv-input" accept=".csv" multiple style="display:none" onchange="importCSV(this)">
+        </label>
+        <button class="btn btn-primary" onclick="importLocal()">整理并导入本地对标目录</button>
+        <span id="import-status" style="font-size:13px;color:var(--text-muted)">支持多份 CSV 自动合并、按 URL 去重、忽略占位值“公众号”、生成标准文件名后导入</span>
+
+        {% if accounts %}
+        <div class="competitor-account-switch">
+            {% if matrix_options %}
+            <label class="competitor-account-label" for="competitor-matrix-select">矩阵：</label>
+            <select id="competitor-matrix-select" class="competitor-account-select competitor-matrix-select" onchange="switchCompetitorMatrix(this.value)">
+                <option value="" {% if not selected_matrix %}selected{% endif %}>全部矩阵</option>
+                {% for matrix_name in matrix_options %}
+                <option value="{{ matrix_name }}" {% if matrix_name == selected_matrix %}selected{% endif %}>
+                    {{ matrix_name }}
+                </option>
+                {% endfor %}
+            </select>
+            {% endif %}
+            <label class="competitor-account-label" for="competitor-account-select">切换账号：</label>
+            <select id="competitor-account-select" class="competitor-account-select" onchange="switchCompetitorAccount(this.value)">
+                {% for acc in accounts %}
+                <option value="{{ acc.id }}" {% if acc.id == selected_id %}selected{% endif %}>
+                    {{ acc.nickname }}{% if acc.matrix_name %}｜{{ acc.matrix_name }}{% endif %}（{{ acc.article_count }}篇）
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% if selected %}
+<!-- 对比概览 -->
+<div class="compare-grid">
+    <div class="card compare-card compare-mine">
+        <div class="compare-label">我的账号</div>
+        <div class="compare-stats">
+            <div class="cstat"><div class="cstat-val">{{ "{:,.0f}".format(baseline.avg_reads or 0) }}</div><div class="cstat-label">平均阅读</div></div>
+            <div class="cstat"><div class="cstat-val">{{ "{:,.0f}".format(baseline.max_reads or 0) }}</div><div class="cstat-label">最高阅读</div></div>
+            <div class="cstat"><div class="cstat-val">{{ "{:.0%}".format(baseline.avg_rec_ratio or 0) }}</div><div class="cstat-label">推荐占比</div></div>
+            <div class="cstat"><div class="cstat-val">{{ baseline.avg_comments or 0 }}</div><div class="cstat-label">平均留言</div></div>
+        </div>
+        <div class="compare-threshold">爆文门槛 &gt; {{ "{:,.0f}".format((baseline.avg_reads or 0) * 1.5) }}</div>
+    </div>
+
+    <div class="compare-vs">VS</div>
+
+    <div class="card compare-card compare-theirs">
+        <div class="compare-label">{{ selected.nickname }}</div>
+        {% if selected.matrix_name %}
+        <div class="compare-matrix">{{ selected.matrix_name }}</div>
+        {% endif %}
+        <div class="compare-stats">
+            <div class="cstat"><div class="cstat-val">{{ "{:,.0f}".format(selected.avg_reads or 0) }}</div><div class="cstat-label">平均阅读</div></div>
+            <div class="cstat"><div class="cstat-val">{{ "{:,.0f}".format(selected.max_reads or 0) }}</div><div class="cstat-label">最高阅读</div></div>
+            <div class="cstat">
+                <div class="cstat-val {% if (selected.avg_reads or 0) > (baseline.avg_reads or 1) %}gap-positive{% endif %}">
+                    +{{ "{:.0%}".format(((selected.avg_reads or 0) - (baseline.avg_reads or 0)) / max(baseline.avg_reads or 1, 1)) }}
+                </div>
+                <div class="cstat-label">均值差距</div>
+            </div>
+            <div class="cstat"><div class="cstat-val">{{ selected.article_count }}</div><div class="cstat-label">总文章数</div></div>
+        </div>
+        <div class="compare-threshold">爆文门槛 &gt; {{ "{:,.0f}".format((selected.avg_reads or 0) * 1.5) }}</div>
+    </div>
+</div>
+
+<!-- 文章列表 -->
+<div class="card" style="margin-top:20px">
+    <div class="card-header">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+            <div>
+                {{ selected.nickname }} 文章列表
+                <span class="card-header-sub">共 {{ articles|length }} 篇 · 按阅读量排序 · 点击「分析」获取移植建议</span>
+            </div>
+            <a class="btn btn-outline btn-sm" href="/export/competitor/{{ selected.id }}.csv">导出当前账号 CSV</a>
+        </div>
+    </div>
+    <div class="card-body" style="padding:0">
+        <div class="table-container">
+            <table class="data-table" id="articles-table">
+                <thead>
+                    <tr>
+                        <th>发布时间</th>
+                        <th>标题</th>
+                        <th>阅读量</th>
+                        <th>互动率</th>
+                        <th>分享</th>
+                        <th>留言</th>
+                        <th>状态</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set my_avg = baseline.avg_reads or 0 %}
+                    {% set their_avg = selected.avg_reads or 0 %}
+                    {% for a in articles %}
+                    {% set engage = ((a.like_num or 0) + (a.share_num or 0) + (a.comment_count or 0)) / [a.read_num, 1] | max %}
+                    <tr id="art-row-{{ a.id }}" class="{% if a.read_num >= their_avg * 1.5 %}row-viral{% endif %}">
+                        <td style="white-space:nowrap;font-size:12px">{{ a.publish_time[:10] if a.publish_time else '—' }}</td>
+                        <td class="title-cell" title="{{ a.title }}">
+                            {% if a.url %}
+                            <a class="competitor-title-link" href="{{ a.url|replace('&amp;', '&') }}" target="_blank" rel="noopener noreferrer">
+                                {{ a.title[:30] }}{% if a.title|length > 30 %}…{% endif %}
+                            </a>
+                            {% else %}
+                            {{ a.title[:30] }}{% if a.title|length > 30 %}…{% endif %}
+                            {% endif %}
+                            {% if a.read_num >= their_avg * 1.5 %}<span class="viral-tag">爆</span>{% endif %}
+                        </td>
+                        <td>
+                            <span class="reads-bar-wrap">
+                                <span class="reads-bar" style="width:{{ ((a.read_num or 0) / (selected.max_reads or 1) * 100)|int }}%"></span>
+                                {{ "{:,}".format(a.read_num or 0) }}
+                            </span>
+                        </td>
+                        <td>{{ "{:.1f}".format(engage * 100) }}%</td>
+                        <td>{{ a.share_num or 0 }}</td>
+                        <td>{{ a.comment_count or 0 }}</td>
+                        <td id="status-{{ a.id }}">
+                            {% if a.manual_analysis_status == 'done' or a.manual_analysis_summary or a.manual_analysis_notes %}
+                            <span class="badge badge-done">已记录</span>
+                            {% elif a.manual_analysis_status == 'discussing' %}
+                            <span class="badge badge-progress">整理中</span>
+                            {% else %}
+                            <span class="badge badge-pending">待记录</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-primary" onclick="toggleManualAnalysis({{ a.id }})">记录分析</button>
+                        </td>
+                    </tr>
+                    <!-- 分析结果展开行 -->
+                    <tr id="analysis-row-{{ a.id }}" class="analysis-expand-row" style="display:none">
+                        <td colspan="8">
+                            <div class="analysis-panel manual-analysis-panel" id="analysis-panel-{{ a.id }}"
+                                 data-status="{{ a.manual_analysis_status or 'pending' }}"
+                                 data-summary="{{ a.manual_analysis_summary or '' }}"
+                                 data-notes="{{ a.manual_analysis_notes or '' }}">
+                                <div class="manual-analysis-grid">
+                                    <div class="analysis-section">
+                                        <div class="asec-label">记录状态</div>
+                                        <select class="manual-select" id="manual-status-{{ a.id }}">
+                                            <option value="pending" {% if not a.manual_analysis_status or a.manual_analysis_status == 'pending' %}selected{% endif %}>待记录</option>
+                                            <option value="discussing" {% if a.manual_analysis_status == 'discussing' %}selected{% endif %}>整理中</option>
+                                            <option value="done" {% if a.manual_analysis_status == 'done' %}selected{% endif %}>已记录</option>
+                                        </select>
+                                    </div>
+                                    <div class="analysis-section">
+                                        <div class="asec-label">最终结论</div>
+                                        <textarea class="manual-textarea manual-textarea-summary" id="manual-summary-{{ a.id }}" placeholder="把我们在对话里得出的核心结论写在这里">{{ a.manual_analysis_summary or '' }}</textarea>
+                                    </div>
+                                    <div class="analysis-section">
+                                        <div class="asec-label">对话要点 / 分析备注</div>
+                                        <textarea class="manual-textarea" id="manual-notes-{{ a.id }}" placeholder="记录你和我讨论后的细节、判断依据、可移植点和风险点">{{ a.manual_analysis_notes or '' }}</textarea>
+                                    </div>
+                                    <div class="manual-analysis-actions">
+                                        <button class="btn btn-primary btn-sm" onclick="saveManualAnalysis({{ a.id }})">保存记录</button>
+                                        <span class="manual-save-status" id="manual-save-status-{{ a.id }}"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% else %}
+<div class="empty-state">
+    <div class="empty-icon">📊</div>
+    <div class="empty-text">还没有对标账号数据</div>
+    <div class="empty-sub">点击上方「导入数据 CSV」上传对标账号的文章数据</div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const MY_AVG = {{ baseline.avg_reads or 0 }};
+
+function switchCompetitorAccount(accountId) {
+    if (!accountId) return;
+    const matrix = document.getElementById('competitor-matrix-select');
+    const qs = new URLSearchParams({ account_id: accountId });
+    if (matrix && matrix.value) {
+        qs.set('matrix', matrix.value);
+    }
+    window.location.href = `/competitor?${qs.toString()}`;
+}
+
+function switchCompetitorMatrix(matrixName) {
+    const qs = new URLSearchParams();
+    if (matrixName) {
+        qs.set('matrix', matrixName);
+    }
+    window.location.href = `/competitor${qs.toString() ? `?${qs.toString()}` : ''}`;
+}
+
+// ── 从本地对标账号目录批量导入 ──────────────────────────────
+function importLocal() {
+    const status = document.getElementById('import-status');
+    status.textContent = '正在整理本地 对标账号/ 目录并导入...';
+    fetch('/api/competitor/import-local', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.ok) {
+                status.textContent = `✗ 错误：${data.error}`;
+                return;
+            }
+            const detail = data.details.map(d =>
+                `${d.nickname}（${d.source_files} 份→${d.deduped_rows} 篇，新增 ${d.inserted}，跳过 ${d.skipped}）`
+            ).join(' | ');
+            status.textContent = `✓ 已整理并导入 ${data.accounts} 个账号，共新增 ${data.total_inserted} 篇，跳过 ${data.total_skipped} 篇。${detail}`;
+            setTimeout(() => window.location.reload(), 1500);
+        })
+        .catch(e => { status.textContent = `✗ 请求失败：${e}`; });
+}
+
+// ── CSV 导入 ────────────────────────────────────────────────
+function importCSV(input) {
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
+    const status = document.getElementById('import-status');
+    status.textContent = '正在整理并导入...';
+    const formData = new FormData();
+    files.forEach(file => formData.append('files', file));
+    fetch('/api/competitor/import', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                status.textContent = `✓ 已整理 ${data.source_files} 份 CSV，合并 ${data.total_rows} 行，去重后 ${data.deduped_rows} 篇，已导入 ${data.nickname}（新增 ${data.inserted}，跳过 ${data.skipped}）`;
+                setTimeout(() => {
+                    window.location.href = `/competitor?account_id=${data.account_id}`;
+                }, 800);
+            } else {
+                status.textContent = `✗ 错误：${data.error}`;
+            }
+        })
+        .catch(e => { status.textContent = `✗ 请求失败：${e}`; })
+        .finally(() => { input.value = ''; });
+}
+
+// ── 手动记录分析 ─────────────────────────────────────────────
+function toggleManualAnalysis(id) {
+    const panel = document.getElementById(`analysis-panel-${id}`);
+    const row = document.getElementById(`analysis-row-${id}`);
+    row.style.display = row.style.display === 'none' ? '' : 'none';
+    if (row.style.display !== 'none') {
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+}
+
+function saveManualAnalysis(id) {
+    const status = document.getElementById(`manual-status-${id}`).value;
+    const summary = document.getElementById(`manual-summary-${id}`).value.trim();
+    const notes = document.getElementById(`manual-notes-${id}`).value.trim();
+    const statusEl = document.getElementById(`status-${id}`);
+    const saveEl = document.getElementById(`manual-save-status-${id}`);
+    saveEl.textContent = '保存中...';
+
+    fetch(`/api/competitor/article/${id}/manual-analysis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, summary, notes }),
+    })
+        .then(async (r) => {
+            const contentType = r.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                const text = await r.text();
+                throw new Error(`服务器返回异常（${r.status}）`);
+            }
+            return r.json();
+        })
+        .then(data => {
+            if (!data.ok) {
+                saveEl.textContent = `保存失败：${data.error}`;
+                return;
+            }
+            if (status === 'done' || summary || notes) {
+                statusEl.innerHTML = '<span class="badge badge-done">已记录</span>';
+            } else if (status === 'discussing') {
+                statusEl.innerHTML = '<span class="badge badge-progress">整理中</span>';
+            } else {
+                statusEl.innerHTML = '<span class="badge badge-pending">待记录</span>';
+            }
+            saveEl.textContent = '已保存';
+            setTimeout(() => { saveEl.textContent = ''; }, 1500);
+        })
+        .catch(e => {
+            saveEl.textContent = `保存失败：${e}`;
+        });
+}
+
+// 页面加载时默认展开已记录内容
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[id^="analysis-panel-"]').forEach(panel => {
+        const id = panel.id.replace('analysis-panel-', '');
+        const hasSummary = panel.dataset.summary && panel.dataset.summary.trim();
+        const hasNotes = panel.dataset.notes && panel.dataset.notes.trim();
+        const status = panel.dataset.status || 'pending';
+        if (status === 'done' || hasSummary || hasNotes) {
+            document.getElementById(`analysis-row-${id}`).style.display = '';
+        }
+    });
+});
+</script>
+
+<style>
+.compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 40px 1fr;
+    gap: 12px;
+    align-items: center;
+}
+.competitor-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+.competitor-account-switch {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    max-width: 100%;
+}
+.competitor-account-label {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+.competitor-account-select {
+    min-width: min(360px, 100%);
+    max-width: 100%;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    padding: 8px 12px;
+}
+.competitor-matrix-select {
+    min-width: min(220px, 100%);
+}
+.compare-card { padding: 20px; }
+.compare-mine { border-left: 3px solid var(--accent); }
+.compare-theirs { border-left: 3px solid #e05c1a; }
+.compare-label { font-size: 13px; font-weight: 700; color: var(--text-muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: .05em; }
+.compare-matrix { font-size: 12px; color: var(--text-muted); margin-top: -6px; margin-bottom: 10px; }
+.compare-stats { display: flex; gap: 16px; flex-wrap: wrap; }
+.cstat { text-align: center; }
+.cstat { flex: 1 1 88px; min-width: 88px; }
+.cstat-val { font-size: 22px; font-weight: 700; color: var(--text-primary); }
+.cstat-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.gap-positive { color: #e05c1a !important; }
+.compare-threshold { margin-top: 10px; font-size: 12px; color: var(--text-muted); }
+.compare-vs { text-align: center; font-size: 14px; font-weight: 700; color: var(--text-muted); }
+
+.row-viral { background: rgba(224,92,26,0.04); }
+.row-viral td:first-child { border-left: 3px solid #e05c1a; }
+.viral-tag {
+    display: inline-block; background: #e05c1a; color: #fff;
+    font-size: 10px; padding: 1px 5px; border-radius: 3px;
+    margin-left: 5px; vertical-align: middle; font-weight: 700;
+}
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge-done { background: #d4f5d4; color: #1a7a1a; }
+.badge-pending { background: #f0f0f0; color: #888; }
+.badge-progress { background: #fff3cd; color: #856404; }
+
+.reads-bar-wrap { display: inline-flex; align-items: center; gap: 6px; }
+.reads-bar { display: inline-block; height: 6px; border-radius: 3px; background: #e05c1a; opacity: 0.5; min-width: 2px; }
+
+.title-cell {
+    max-width: 260px;
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.5;
+}
+.competitor-title-link {
+    color: var(--text);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.competitor-title-link:hover {
+    color: var(--accent);
+}
+.card-header-sub { font-size: 12px; color: var(--text-muted); font-weight: 400; margin-left: 8px; }
+.table-container { overflow-x: auto; }
+#articles-table { table-layout: fixed; width: 100%; min-width: 0; }
+#articles-table th,
+#articles-table td {
+    padding: 10px 8px;
+    vertical-align: top;
+}
+#articles-table th:nth-child(1),
+#articles-table td:nth-child(1) { width: 96px; }
+#articles-table th:nth-child(2),
+#articles-table td:nth-child(2) { width: 38%; }
+#articles-table th:nth-child(3),
+#articles-table td:nth-child(3) { width: 120px; }
+#articles-table th:nth-child(4),
+#articles-table td:nth-child(4),
+#articles-table th:nth-child(5),
+#articles-table td:nth-child(5),
+#articles-table th:nth-child(6),
+#articles-table td:nth-child(6),
+#articles-table th:nth-child(7),
+#articles-table td:nth-child(7),
+#articles-table th:nth-child(8),
+#articles-table td:nth-child(8) {
+    width: 76px;
+}
+
+/* 分析展开行 */
+.analysis-expand-row td { background: var(--surface-2, #f8f8f8); border-top: none; padding: 0; }
+.analysis-panel { padding: 16px 20px; }
+.analysis-error { color: #a33; font-size: 13px; padding: 8px 0; }
+.manual-analysis-grid { display: grid; gap: 14px; }
+.analysis-section { margin-bottom: 14px; }
+.asec-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
+.asec-val { font-size: 14px; color: var(--text-primary); line-height: 1.5; }
+.manual-select,
+.manual-textarea {
+    width: 100%;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    padding: 10px 12px;
+}
+.manual-textarea {
+    resize: vertical;
+    min-height: 120px;
+}
+.manual-textarea-summary {
+    min-height: 84px;
+}
+.manual-analysis-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.manual-save-status {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.empty-state { text-align: center; padding: 60px 20px; }
+.empty-icon { font-size: 48px; margin-bottom: 12px; }
+.empty-text { font-size: 18px; font-weight: 600; color: var(--text-primary); }
+.empty-sub { font-size: 14px; color: var(--text-muted); margin-top: 6px; }
+
+@media (max-width: 1200px) {
+    .compare-grid {
+        grid-template-columns: 1fr;
+    }
+    .compare-vs {
+        display: none;
+    }
+    .competitor-account-switch {
+        margin-left: 0;
+        width: 100%;
+    }
+    .competitor-account-select {
+        width: 100%;
+    }
+    .analysis-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    #articles-table th:nth-child(2),
+    #articles-table td:nth-child(2) {
+        width: auto;
+    }
+}
+
+@media (max-width: 768px) {
+    .competitor-toolbar {
+        align-items: stretch;
+        gap: 12px;
+    }
+    .competitor-toolbar > * {
+        max-width: 100%;
+    }
+    .compare-card {
+        padding: 16px;
+    }
+    .compare-stats {
+        gap: 12px;
+    }
+    .card-header-sub {
+        display: block;
+        margin-left: 0;
+        margin-top: 4px;
+    }
+    .analysis-panel {
+        padding: 14px 12px;
+    }
+    #articles-table {
+        font-size: 12px;
+    }
+    #articles-table th,
+    #articles-table td {
+        padding: 8px 6px;
+    }
+    #articles-table th:nth-child(1),
+    #articles-table td:nth-child(1) {
+        width: 82px;
+    }
+    #articles-table th:nth-child(3),
+    #articles-table td:nth-child(3) {
+        width: 88px;
+    }
+    #articles-table th:nth-child(4),
+    #articles-table td:nth-child(4),
+    #articles-table th:nth-child(5),
+    #articles-table td:nth-child(5),
+    #articles-table th:nth-child(6),
+    #articles-table td:nth-child(6),
+    #articles-table th:nth-child(7),
+    #articles-table td:nth-child(7),
+    #articles-table th:nth-child(8),
+    #articles-table td:nth-child(8) {
+        width: 64px;
+    }
+}
+</style>
+{% endblock %}

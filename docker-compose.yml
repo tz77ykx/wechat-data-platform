@@ -1,0 +1,13 @@
+version: "3.8"
+services:
+  web:
+    build: .
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+    environment:
+      - MASTER_DB_PATH=/app/data/wechat_master.db
+      - DB_PATH=/app/data/wechat_master.db
+    restart: unless-stopped

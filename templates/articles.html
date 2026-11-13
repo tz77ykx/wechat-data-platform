@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+{% block title %}文章排行 — 公众号管理平台{% endblock %}
+
+{% block head %}
+<style>
+    .search-bar {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+    .search-bar input[type="text"] {
+        min-width: 260px;
+    }
+    thead th.sortable { cursor: pointer; user-select: none; }
+    thead th.sortable:after { content: ' \2195'; font-size: 10px; color: var(--text-muted); }
+    thead th.sort-asc:after { content: ' \2191'; color: var(--text); }
+    thead th.sort-desc:after { content: ' \2193'; color: var(--text); }
+    tr.row-stale td { color: var(--text-secondary); }
+    .badge { display:inline-block; font-size:11px; padding:1px 6px; border-radius:4px; border:1px solid; margin-left:4px; vertical-align:middle; }
+    #staleBanner { margin-bottom: 16px; }
+    .editable-cell { cursor: pointer; }
+    .editable-cell:hover .cell-val { text-decoration: underline dotted; }
+    .reads-input { width: 80px; font-size: 13px; text-align: right; padding: 1px 4px;
+                   border: 1px solid var(--primary); border-radius: 4px; outline: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2 class="page-title">文章排行</h2>
+        <div class="page-subtitle">全部文章按阅读量排序，支持搜索与多列排序</div>
+    </div>
+    <div class="date-range-picker">
+        <input type="date" id="dateStart" class="form-input" style="width:auto">
+        <span>~</span>
+        <input type="date" id="dateEnd" class="form-input" style="width:auto">
+        <button class="btn btn-outline" onclick="DateRange.reset()">重置</button>
+    </div>
+    <button class="btn btn-outline" onclick="_panelToggle()">自定义面板</button>
+</div>
+
+<div id="staleBanner" style="display:none" class="alert alert-warning" style="margin-bottom:16px;">
+</div>
+
+<!-- search + export -->
+<div data-panel="table" class="card">
+    <div class="search-bar mb-16">
+        <input type="text" id="searchInput" class="form-input" placeholder="搜索标题..." style="width:auto;min-width:260px;">
+        <a href="/export/articles.csv" class="btn btn-outline">导出 CSV</a>
+    </div>
+    <div class="table-wrapper">
+        <table id="articlesTable">
+            <thead>
+                <tr>
+                    <th class="sortable" data-key="publish_date" data-type="string">日期</th>
+                    <th class="sortable" data-key="title" data-type="string">标题</th>
+                    <th class="sortable td-num" data-key="total_reads" data-type="number">阅读量</th>
+                    <th class="sortable td-num" data-key="rec_pct" data-type="number">推荐占比</th>
+                    <th class="sortable td-num" data-key="share_user" data-type="number">转发</th>
+                    <th class="sortable td-num" data-key="thumbup_user" data-type="number">点赞</th>
+                    <th class="sortable td-num" data-key="like_user" data-type="number">在看</th>
+                    <th class="sortable td-num" data-key="fav_user" data-type="number">收藏</th>
+                    <th class="sortable td-num" data-key="complete_rate" data-type="number">完读率</th>
+                    <th class="sortable td-num" data-key="avg_read_time" data-type="number">均读时长</th>
+                </tr>
+            </thead>
+            <tbody id="articlesBody">
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    /* ── 数据 ─────────────────────────────────────────────────────────────────── */
+    const rawData = {{ ranking|tojson }};
+    let tableData = [...rawData];
+    let sortKey = 'total_reads';
+    let sortDir = 'desc';
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str || '';
+        return div.innerHTML;
+    }
+
+    /* ── 渲染表格 ─────────────────────────────────────────────────────────────── */
+    function renderTable() {
+        const tbody = document.getElementById('articlesBody');
+        if (!tableData.length) {
+            tbody.innerHTML = '<tr><td colspan="9" class="empty-state">暂无数据</td></tr>';
+            return;
+        }
+        function editCell(field, rawVal, displayVal) {
+            const t = escapeHtml(art.title || '');
+            return `<td class="td-num editable-cell" data-title="${t}" data-field="${field}" data-raw="${rawVal}"><span class="cell-val">${displayVal}</span></td>`;
+        }
+
+        tbody.innerHTML = tableData.map(art => {
+            const staleTag = art.stale
+                ? ' <span class="badge badge-warning" title="阅读数未被最新数据文件覆盖，可能偏低">数据旧</span>'
+                : '';
+            const readsDisplay = (art.total_reads || 0).toLocaleString() + staleTag;
+            return '<tr' + (art.stale ? ' class="row-stale"' : '') + '>' +
+            '<td class="editable-cell" data-title="' + escapeHtml(art.title) + '" data-field="publish_date" data-raw="' + escapeHtml(art.publish_date) + '"><span class="cell-val">' + escapeHtml(art.publish_date) + '</span></td>' +
+            '<td><a class="table-link" href="/article/' + encodeURIComponent(art.title) + '">' + escapeHtml(art.title) + '</a></td>' +
+            '<td class="td-num editable-cell" data-title="' + escapeHtml(art.title) + '" data-field="total_reads" data-raw="' + (art.total_reads || 0) + '"><span class="cell-val">' + readsDisplay + '</span></td>' +
+            '<td class="td-num editable-cell" data-title="' + escapeHtml(art.title) + '" data-field="rec_pct" data-raw="' + (art.rec_pct ?? '') + '"><span class="cell-val">' + (art.rec_pct != null ? art.rec_pct + '%' : '-') + '</span></td>' +
+            '<td class="td-num editable-cell" data-title="' + escapeHtml(art.title) + '" data-field="share_user" data-raw="' + (art.share_user ?? '') + '"><span class="cell-val">' + (art.share_user != null ? art.share_user.toLocaleString() : '-') + '</span></td>' +
+            '<td class="td-num editable-cell" data-title="' + escapeHtml(art.title) + '" data-field="thumbup_user" data-raw="' + (art.thumbup_user ?? '') + '"><span class="cell-val">' + (art.thumbup_user != null ? art.thumbup_user.toLocaleString() : '-') + '</span></td>' +
+            '<td class="td-num editable-cell" data-title="' + escapeHtml(art.title) + '" data-field="like_user" data-raw="' + (art.like_user ?? '') + '"><span class="cell-val">' + (art.like_user != null ? art.like_user.toLocaleString() : '-') + '</span></td>' +
+            '<td class="td-num editable-cell" data-title="' + escapeHtml(art.title) + '" data-field="fav_user" data-raw="' + (art.fav_user ?? '') + '"><span class="cell-val">' + (art.fav_user != null ? art.fav_user.toLocaleString() : '-') + '</span></td>' +
+            '<td class="td-num editable-cell" data-title="' + escapeHtml(art.title) + '" data-field="complete_rate" data-raw="' + (art.complete_rate ?? '') + '"><span class="cell-val">' + (art.complete_rate != null ? art.complete_rate + '%' : '-') + '</span></td>' +
+            '<td class="td-num editable-cell" data-title="' + escapeHtml(art.title) + '" data-field="avg_read_time" data-raw="' + (art.avg_read_time ?? '') + '"><span class="cell-val">' + (art.avg_read_time != null ? art.avg_read_time + 's' : '-') + '</span></td>' +
+            '</tr>';
+        }).join('');
+    }
+
+    /* ── 搜索 ─────────────────────────────────────────────────────────────────── */
+    function applySearch() {
+        const q = document.getElementById('searchInput').value.trim().toLowerCase();
+        tableData = rawData.filter(art => {
+            if (!q) return true;
+            return (art.title || '').toLowerCase().includes(q);
+        });
+        applySort();
+    }
+
+    /* ── 排序 ─────────────────────────────────────────────────────────────────── */
+    function applySort() {
+        tableData.sort((a, b) => {
+            let va = a[sortKey];
+            let vb = b[sortKey];
+            if (typeof va === 'string') va = va || '';
+            if (typeof vb === 'string') vb = vb || '';
+            if (typeof va === 'string') {
+                const cmp = va.localeCompare(vb, 'zh');
+                return sortDir === 'asc' ? cmp : -cmp;
+            }
+            va = va || 0;
+            vb = vb || 0;
+            return sortDir === 'asc' ? va - vb : vb - va;
+        });
+        renderTable();
+        updateSortHeaders();
+    }
+
+    function updateSortHeaders() {
+        document.querySelectorAll('#articlesTable thead th.sortable').forEach(th => {
+            th.classList.remove('sort-asc', 'sort-desc');
+            if (th.dataset.key === sortKey) {
+                th.classList.add(sortDir === 'desc' ? 'sort-desc' : 'sort-asc');
+            }
+        });
+    }
+
+    /* ── 通用内联编辑 ───────────────────────────────────────────────────────────── */
+    // 字段显示格式化
+    const fieldFormat = {
+        total_reads:      v => v !== '' && v != null ? Number(v).toLocaleString() : '-',
+        publish_date:     v => v || '-',
+        rec_pct:          v => v !== '' && v != null ? v + '%' : '-',
+        share_user:       v => v !== '' && v != null ? Number(v).toLocaleString() : '-',
+        thumbup_user:     v => v !== '' && v != null ? Number(v).toLocaleString() : '-',
+        like_user:        v => v !== '' && v != null ? Number(v).toLocaleString() : '-',
+        fav_user:         v => v !== '' && v != null ? Number(v).toLocaleString() : '-',
+        complete_rate:    v => v !== '' && v != null ? v + '%' : '-',
+        avg_read_time:    v => v !== '' && v != null ? v + 's' : '-',
+    };
+    // 字段输入类型
+    const fieldInputType = {
+        publish_date: 'date',
+    };
+
+    function initReadsEdit() {
+        document.getElementById('articlesBody').addEventListener('click', function(e) {
+            const cell = e.target.closest('.editable-cell');
+            if (!cell || cell.querySelector('input')) return;
+
+            const title = cell.dataset.title;
+            const field = cell.dataset.field;
+            const currentRaw = cell.dataset.raw;
+
+            const span = cell.querySelector('.cell-val');
+            const badge = cell.querySelector('.badge');
+
+            const input = document.createElement('input');
+            input.type = fieldInputType[field] || 'number';
+            input.className = 'reads-input';
+            input.value = currentRaw;
+            if (input.type === 'number') input.min = 0;
+            if (field === 'complete_rate') { input.min = 0; input.max = 100; input.step = 0.1; }
+
+            span.replaceWith(input);
+            if (badge) badge.style.display = 'none';
+            input.focus();
+            input.select();
+
+            function save() {
+                const newVal = input.value.trim();
+                if (newVal === currentRaw) { cancel(); return; }
+
+                fetch('/api/article-field/' + encodeURIComponent(title), {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ field: field, value: newVal }),
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.ok) { alert('保存失败: ' + data.error); cancel(); return; }
+                    cell.dataset.raw = newVal;
+                    const newSpan = document.createElement('span');
+                    newSpan.className = 'cell-val';
+                    const fmt = fieldFormat[field] || (v => v);
+                    newSpan.innerHTML = fmt(newVal);
+                    input.replaceWith(newSpan);
+                    if (badge) badge.style.display = '';
+                    // 同步更新 rawData
+                    const art = rawData.find(a => a.title === title);
+                    if (art) {
+                        if (field === 'total_reads') art.total_reads = parseInt(newVal);
+                        else if (field === 'complete_rate') art.complete_rate = parseFloat(newVal);
+                        else if (field in art) art[field] = newVal;
+                    }
+                })
+                .catch(() => { alert('请求失败'); cancel(); });
+            }
+
+            function cancel() {
+                const newSpan = document.createElement('span');
+                newSpan.className = 'cell-val';
+                const fmt = fieldFormat[field] || (v => v);
+                newSpan.innerHTML = fmt(currentRaw);
+                input.replaceWith(newSpan);
+                if (badge) badge.style.display = '';
+            }
+
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); save(); }
+                if (e.key === 'Escape') cancel();
+            });
+            input.addEventListener('blur', save);
+        });
+    }
+
+    /* ── 过时数据 Banner ───────────────────────────────────────────────────────── */
+    function renderStaleBanner() {
+        const staleItems = rawData.filter(a => a.stale);
+        if (!staleItems.length) return;
+        const sinceDate = staleItems[0].stale_since || '';
+        const banner = document.getElementById('staleBanner');
+        banner.style.display = '';
+        banner.innerHTML =
+            '<strong>注意：</strong>' + staleItems.length + ' 篇文章的阅读数未被最新数据文件覆盖' +
+            (sinceDate ? '（最新文件仅覆盖 ' + escapeHtml(sinceDate) + ' 以后）' : '') +
+            '，数字可能偏低，建议手动核对或补导数据。' +
+            ' <a href="#" style="font-weight:600;text-decoration:underline;" onclick="filterStale();return false;">只看这些文章</a>' +
+            ' <a href="#" style="margin-left:12px;" onclick="clearStaleFilter();return false;">显示全部</a>';
+    }
+
+    function filterStale() {
+        tableData = rawData.filter(a => a.stale);
+        applySort();
+    }
+
+    function clearStaleFilter() {
+        tableData = [...rawData];
+        applySort();
+    }
+
+    /* ── 初始化 ────────────────────────────────────────────────────────────────── */
+    document.addEventListener('DOMContentLoaded', () => {
+        // Initial sort and render
+        applySort();
+        renderStaleBanner();
+
+        // Search
+        document.getElementById('searchInput').addEventListener('input', applySearch);
+
+        // Column sort
+        document.getElementById('articlesTable').querySelector('thead').addEventListener('click', (e) => {
+            const th = e.target.closest('th.sortable');
+            if (!th) return;
+            const key = th.dataset.key;
+            if (sortKey === key) {
+                sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+            } else {
+                sortKey = key;
+                sortDir = th.dataset.type === 'string' ? 'asc' : 'desc';
+            }
+            applySort();
+        });
+
+        // Inline edit
+        initReadsEdit();
+
+    });
+})();
+
+PanelManager.init('articles', [
+    { id: 'table',  label: '文章列表',              defaultVisible: true },
+]);
+</script>
+{% endblock %}

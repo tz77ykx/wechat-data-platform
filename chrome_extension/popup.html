@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    width: 360px; padding: 16px;
+    font-family: -apple-system, "PingFang SC", sans-serif;
+    font-size: 13px; color: #333;
+  }
+  h2 { font-size: 14px; font-weight: 700; margin-bottom: 14px; color: #1a73e8; }
+
+  .row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 10px; border-radius: 6px; margin-bottom: 6px;
+    background: #f8f8f8;
+  }
+  .row .label { font-weight: 600; color: #444; }
+  .row .val {
+    font-family: monospace; font-size: 11px; color: #888;
+    max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    flex-shrink: 0; margin-left: 8px;
+  }
+  .dot.ok  { background: #34a853; }
+  .dot.no  { background: #ddd; }
+  .dot.old { background: #fbbc04; }
+
+  .age { font-size: 10px; color: #aaa; margin-left: 4px; }
+
+  #btn {
+    width: 100%; padding: 10px; margin-top: 14px;
+    background: #1a73e8; color: #fff; border: none;
+    border-radius: 8px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: background .15s;
+  }
+  #btn:hover { background: #1558b0; }
+  #btn:disabled { background: #aaa; cursor: not-allowed; }
+
+  #msg {
+    margin-top: 10px; min-height: 18px; font-size: 12px;
+    text-align: center; border-radius: 4px; padding: 4px 0;
+  }
+  #msg.ok  { color: #2d7a40; background: #e6f4ea; }
+  #msg.err { color: #c5221f; background: #fce8e6; }
+  #msg.info{ color: #555; }
+
+  .divider {
+    margin: 14px 0 10px; border-top: 1px solid #eee;
+    padding-top: 10px;
+  }
+  .divider h3 {
+    font-size: 13px; font-weight: 600; color: #444; margin-bottom: 8px;
+  }
+
+  #btn-download {
+    width: 100%; padding: 10px; margin-top: 6px;
+    background: #07C160; color: #fff; border: none;
+    border-radius: 8px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: background .15s;
+  }
+  #btn-download:hover { background: #06ae56; }
+  #btn-download:disabled { background: #aaa; cursor: not-allowed; }
+
+  #dl-progress {
+    margin-top: 8px; font-size: 12px; color: #555;
+    min-height: 18px;
+  }
+  #dl-progress.ok  { color: #2d7a40; }
+  #dl-progress.err { color: #c5221f; }
+
+  .download-options { padding: 10px; border: 1px solid #E0E0E0; background: #F9F8F4; }
+  .download-options label { display: block; margin-bottom: 8px; color: #2D2D2D; }
+  .download-options select, .download-options input {
+    display: block; width: 100%; min-width: 0; margin-top: 4px; padding: 6px;
+    border: 1px solid #E0E0E0; border-radius: 0; background: #FFFFFF;
+    color: #2D2D2D; font: inherit;
+  }
+  .date-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .download-options p { color: #6E6E6E; font-size: 11px; line-height: 1.5; }
+
+  .hint {
+    margin-top: 12px; font-size: 11px; color: #aaa; line-height: 1.6;
+    border-top: 1px solid #eee; padding-top: 10px;
+  }
+</style>
+</head>
+<body>
+<h2>公众号助手 · 凭证同步</h2>
+
+<div class="row">
+  <span class="label">Token</span>
+  <span class="val" id="v-token">未检测</span>
+  <span class="dot no" id="d-token"></span>
+</div>
+<div class="row">
+  <span class="label">Fingerprint</span>
+  <span class="val" id="v-fp">未检测</span>
+  <span class="dot no" id="d-fp"></span>
+</div>
+<div class="row">
+  <span class="label">Cookies</span>
+  <span class="val" id="v-cookie">—</span>
+  <span class="dot no" id="d-cookie"></span>
+</div>
+
+<button id="btn">⬆️ 一键同步到本地工具</button>
+<div id="msg" class="info"></div>
+
+<div class="divider">
+  <h3>批量下载文章详情</h3>
+  <div class="download-options">
+    <label for="dl-period">文章发布日期
+      <select id="dl-period">
+        <option value="7">最近 7 天</option>
+        <option value="30" selected>最近 30 天</option>
+        <option value="90">最近 90 天</option>
+        <option value="custom">自定义日期</option>
+      </select>
+    </label>
+    <div class="date-fields">
+      <label for="dl-start">开始日期<input id="dl-start" type="date" required></label>
+      <label for="dl-end">结束日期<input id="dl-end" type="date" required></label>
+    </div>
+    <label for="dl-mode">下载方式
+      <select id="dl-mode">
+        <option value="missing">只补未导入详情的文章</option>
+        <option value="refresh">重新更新范围内的全部文章</option>
+      </select>
+    </label>
+    <p>按发布日期筛选，包含起止当天。下载所选文章的详情文件，范围外的历史文章保留原数据。</p>
+  </div>
+  <button id="btn-download">📥 开始批量下载</button>
+  <div id="dl-progress"></div>
+</div>
+
+<div class="divider">
+  <h3>抓取对标文章正文</h3>
+  <button id="btn-content" style="width:100%;padding:10px;margin-top:6px;background:#e05c1a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">📄 批量抓取正文</button>
+  <div id="content-progress" style="margin-top:8px;font-size:12px;color:#555;min-height:18px;"></div>
+</div>
+
+<div class="hint">
+  ① 打开微信后台任意页面，凭证会自动出现。<br>
+  ② 先登录微信后台并同步凭证，再选择发布日期与下载方式；只刷新所选范围的文章列表。<br>
+  ③ 下载的文件会自动被系统识别并导入。<br>
+  ④ 抓取正文：抓取已分析的对标爆文正文，用于深度分析。
+</div>
+
+<script src="download-selection.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}深度洞察 - 公众号管理平台{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2 class="page-title">深度洞察</h2>
+        <div class="page-subtitle">标题分析 / 节假日效应 / 爆款评分</div>
+    </div>
+    <button class="btn btn-outline" onclick="_panelToggle()">自定义面板</button>
+</div>
+
+
+<!-- 标题分析 -->
+<div data-panel="title" class="grid-2">
+    <div class="card">
+        <div class="card-title">标题长度 vs 阅读量</div>
+        <div class="chart-box"><canvas id="chartTitleLength"></canvas></div>
+    </div>
+    <div class="card">
+        <div class="card-title">标题特征对比</div>
+        <div class="chart-box"><canvas id="chartTitleFeature"></canvas></div>
+    </div>
+</div>
+
+<!-- 发文频率 -->
+<div data-panel="frequency" class="grid-2">
+    <div class="card">
+        <div class="card-title">发文频率 vs 阅读量</div>
+        <div class="chart-box"><canvas id="chartFrequency"></canvas></div>
+    </div>
+    <div class="card" data-panel-holiday-placeholder style="visibility:hidden;"></div>
+</div>
+
+<!-- 节假日影响 -->
+<div data-panel="holiday" class="card">
+    <div class="card-title">节假日影响</div>
+    <div class="chart-box"><canvas id="chartHoliday"></canvas></div>
+</div>
+
+<!-- 爆款概率评分 -->
+<div data-panel="viral" class="card">
+    <div class="card-title">爆款概率评分 <span class="text-muted" style="font-size:12px;font-weight:400;">Top 20</span></div>
+    <div class="table-wrapper">
+        <table id="tableViral">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>标题</th>
+                    <th class="td-num">总阅读</th>
+                    <th class="td-num">推荐占比</th>
+                    <th class="td-num">评分</th>
+                    <th style="min-width:120px;">分布</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    <div class="loading" id="viralLoading">加载中...</div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+PanelManager.init('insights', [
+    { id: 'title',     label: '标题分析',          defaultVisible: true  },
+    { id: 'frequency', label: '发文频率 vs 阅读量', defaultVisible: false },
+    { id: 'holiday',   label: '节假日影响',         defaultVisible: true  },
+    { id: 'viral',     label: '爆款概率评分',        defaultVisible: true  },
+]);
+
+(function() {
+    const R = { responsive: true, maintainAspectRatio: false };
+
+    /* ── 标题长度 vs 阅读量 & 标题特征对比 ─────────────────────── */
+    fetch('/api/title-analysis')
+        .then(r => r.json())
+        .then(data => {
+            try {
+                const bl = data.by_length || [];
+                ZJ.barChart(
+                    document.getElementById('chartTitleLength').getContext('2d'),
+                    bl.map(d => d.label),
+                    [{ label: '平均阅读量', data: bl.map(d => d.avg_reads) }],
+                    { ...R, scales: { y: { beginAtZero: true } } }
+                );
+            } catch(e) { window._chartErr('chartTitleLength', e); }
+
+            try {
+                const bn = data.by_number || [];
+                const bq = data.by_question || [];
+                ZJ.barChart(
+                    document.getElementById('chartTitleFeature').getContext('2d'),
+                    ['含数字', '不含数字', '疑问式', '非疑问'],
+                    [{ label: '平均阅读量',
+                       data: [(bn[0]||{}).avg_reads||0, (bn[1]||{}).avg_reads||0,
+                              (bq[0]||{}).avg_reads||0, (bq[1]||{}).avg_reads||0] }],
+                    { ...R, scales: { y: { beginAtZero: true } } }
+                );
+            } catch(e) { window._chartErr('chartTitleFeature', e); }
+        })
+        .catch(err => window._chartErr('fetch/title-analysis', err));
+
+    /* ── 发文频率 vs 阅读量 ──────────────────────────────────── */
+    fetch('/api/posting-frequency')
+        .then(r => r.json())
+        .then(data => {
+            new Chart(document.getElementById('chartFrequency').getContext('2d'), {
+                type: 'scatter',
+                data: { datasets: [{
+                    label: '周发文数 vs 平均阅读',
+                    data: (data || []).map(d => ({ x: d.article_count, y: d.avg_reads })),
+                    backgroundColor: ZJ.bgColor(1), borderColor: ZJ.color(1),
+                    pointRadius: 5, pointHoverRadius: 7,
+                }]},
+                options: { ...R,
+                    scales: {
+                        x: { title: { display: true, text: '周发文数' }, beginAtZero: true },
+                        y: { title: { display: true, text: '平均阅读量' }, beginAtZero: true },
+                    }}
+            });
+        })
+        .catch(err => console.error('posting-frequency error:', err));
+
+    /* ── 节假日影响 ──────────────────────────────────────────── */
+    fetch('/api/holiday-analysis')
+        .then(r => r.json())
+        .then(data => {
+            ZJ.barChart(
+                document.getElementById('chartHoliday').getContext('2d'),
+                ['节假日', '周末', '工作日'],
+                [{ label: '平均阅读量',
+                   data: [(data.holiday||{}).avg||0, (data.weekend||{}).avg||0, (data.workday||{}).avg||0] }],
+                { ...R, scales: { y: { beginAtZero: true } } }
+            );
+        })
+        .catch(err => console.error('holiday-analysis error:', err));
+
+    /* ── 爆款概率评分 ────────────────────────────────────────── */
+    fetch('/api/viral-scores')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('viralLoading').style.display = 'none';
+            const items = (data || []).slice(0, 20);
+            const tbody = document.querySelector('#tableViral tbody');
+            if (!items.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">暂无数据</td></tr>';
+                return;
+            }
+            const maxScore = Math.max(...items.map(d => d.score || 0), 1);
+            tbody.innerHTML = items.map((d, i) => {
+                const pct = Math.round(((d.score || 0) / maxScore) * 100);
+                return '<tr>' +
+                    '<td>' + (i + 1) + '</td>' +
+                    '<td>' + escapeHtml(d.title || '') + '</td>' +
+                    '<td class="td-num">' + formatNum(d.total_reads) + '</td>' +
+                    '<td class="td-num">' + (d.rec_pct != null ? d.rec_pct.toFixed(1) + '%' : '-') + '</td>' +
+                    '<td class="td-num">' + (d.score != null ? d.score.toFixed(1) : '-') + '</td>' +
+                    '<td><div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%"></div></div></td>' +
+                '</tr>';
+            }).join('');
+        })
+        .catch(err => {
+            document.getElementById('viralLoading').style.display = 'none';
+            console.error('viral-scores error:', err);
+        });
+
+    /* ── 工具函数 ────────────────────────────────────────────── */
+    function formatNum(n) { return n == null ? '-' : n.toLocaleString('zh-CN'); }
+    function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+})();
+</script>
+{% endblock %}

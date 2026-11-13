@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block title %}发文预测 — 公众号管理平台{% endblock %}
+
+{% block head %}
+<style>
+    .predict-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); gap: 20px; }
+    .form-row { margin-bottom: 16px; }
+    .form-row label { display: block; margin-bottom: 6px; font-size: 13px; color: var(--text-secondary); }
+    .form-row input, .form-row textarea, .form-row select, .actual-input {
+        width: 100%; border: 1px solid var(--border); background: var(--surface); color: var(--text);
+        padding: 9px 10px; font: inherit; border-radius: 0;
+    }
+    .form-row textarea { min-height: 120px; resize: vertical; }
+    .form-inline { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .score-row { display: grid; grid-template-columns: 1fr 90px; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border-light); }
+    .score-row:last-child { border-bottom: 0; }
+    .score-name { font-size: 14px; }
+    .score-help { display: block; color: var(--text-muted); font-size: 12px; }
+    .prediction-list { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .prediction-item { border: 1px solid var(--border); padding: 14px; }
+    .prediction-value { font-family: var(--font-title); font-size: 22px; margin-top: 4px; }
+    .prediction-label { color: var(--text-secondary); font-size: 12px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+    .hint { color: var(--text-secondary); font-size: 12px; margin-top: 12px; }
+    .prompt-box { width: 100%; min-height: 230px; border: 1px solid var(--border); padding: 12px; font: 12px/1.7 var(--font-mono); resize: vertical; }
+    .history-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .history-table th, .history-table td { border-bottom: 1px solid var(--border); padding: 10px 8px; text-align: left; vertical-align: top; }
+    .history-table th { color: var(--text-secondary); font-weight: 500; }
+    .history-title { min-width: 160px; }
+    .history-actuals { display: grid; grid-template-columns: repeat(2, minmax(90px, 1fr)); gap: 6px; min-width: 230px; }
+    .actual-input { padding: 6px; font-size: 12px; }
+    .status { margin-left: 10px; font-size: 13px; color: var(--accent); }
+    .empty { color: var(--text-muted); padding: 24px 0; text-align: center; }
+    @media (max-width: 1000px) { .predict-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 600px) { .form-inline, .prediction-list { grid-template-columns: 1fr; } .history-table { display: block; overflow-x: auto; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <div>
+        <h1 class="page-title">发文预测</h1>
+        <p class="page-subtitle">7维评分、发布前预估与发布后回填</p>
+    </div>
+    <a class="btn" href="/baseline">查看账号基准</a>
+</header>
+
+<div class="predict-grid">
+    <section class="card">
+        <h2 class="card-title">文章信息</h2>
+        <div class="form-row">
+            <label for="predict-title">文章标题</label>
+            <input id="predict-title" type="text" value="{{ prefill_title }}" placeholder="输入准备发布的标题" required>
+        </div>
+        <div class="form-row">
+            <label for="predict-draft">草稿或内容摘要</label>
+            <textarea id="predict-draft" placeholder="粘贴草稿，或概括文章要解决的问题">{{ prefill_draft }}</textarea>
+        </div>
+        <div class="form-inline">
+            <div class="form-row">
+                <label for="predict-source">选题来源</label>
+                <input id="predict-source" type="text" value="{{ prefill_source }}" placeholder="原创 / 对标号">
+            </div>
+            <div class="form-row">
+                <label for="predict-date">计划日期</label>
+                <input id="predict-date" type="date" value="{{ prefill_publish_date }}">
+            </div>
+            <div class="form-row">
+                <label for="predict-time">计划时间</label>
+                <input id="predict-time" type="time" value="{{ prefill_publish_time }}">
+            </div>
+        </div>
+
+        <h2 class="card-title">7维评分</h2>
+        <div id="score-list">
+            <div class="score-row"><div class="score-name">A 选题需求<span class="score-help">目标读者是否有明确、迫切的需求</span></div><select data-score="a"><option value="1">1 很弱</option><option value="2">2 较弱</option><option value="3" selected>3 一般</option><option value="4">4 较强</option><option value="5">5 很强</option></select></div>
+            <div class="score-row"><div class="score-name">B 标题吸引力<span class="score-help">标题是否清晰、具体并值得点击</span></div><select data-score="b"><option value="1">1 很弱</option><option value="2">2 较弱</option><option value="3" selected>3 一般</option><option value="4">4 较强</option><option value="5">5 很强</option></select></div>
+            <div class="score-row"><div class="score-name">C 内容价值<span class="score-help">信息、方法或情绪价值是否充分</span></div><select data-score="c"><option value="1">1 很弱</option><option value="2">2 较弱</option><option value="3" selected>3 一般</option><option value="4">4 较强</option><option value="5">5 很强</option></select></div>
+            <div class="score-row"><div class="score-name">D 传播潜力<span class="score-help">读者是否愿意分享或收藏</span></div><select data-score="d"><option value="1">1 很弱</option><option value="2">2 较弱</option><option value="3" selected>3 一般</option><option value="4">4 较强</option><option value="5">5 很强</option></select></div>
+            <div class="score-row"><div class="score-name">E 完读设计<span class="score-help">开头、结构和节奏能否支撑读完</span></div><select data-score="e"><option value="1">1 很弱</option><option value="2">2 较弱</option><option value="3" selected>3 一般</option><option value="4">4 较强</option><option value="5">5 很强</option></select></div>
+            <div class="score-row"><div class="score-name">F 互动设计<span class="score-help">是否有自然、具体的留言理由</span></div><select data-score="f"><option value="1">1 很弱</option><option value="2">2 较弱</option><option value="3" selected>3 一般</option><option value="4">4 较强</option><option value="5">5 很强</option></select></div>
+            <div class="score-row"><div class="score-name">G 话题普适性<span class="score-help">是否能覆盖目标读者中的较大人群</span></div><select data-score="g"><option value="1">1 很弱</option><option value="2">2 较弱</option><option value="3" selected>3 一般</option><option value="4">4 较强</option><option value="5">5 很强</option></select></div>
+        </div>
+        <div class="form-row" style="margin-top:16px">
+            <label for="predict-notes">备注</label>
+            <textarea id="predict-notes" placeholder="记录评分依据、实验变量或需要观察的事项"></textarea>
+        </div>
+        <div class="actions">
+            <button class="btn btn-primary" id="save-prediction" type="button">保存预测</button>
+            <button class="btn" id="send-calendar" type="button">送入推送日历</button>
+            <span class="status" id="predict-status" role="status"></span>
+        </div>
+        <p class="hint">预测区间来自规则评分，只用于发布前比较和事后复盘，不代表流量承诺。</p>
+    </section>
+
+    <div>
+        <section class="card">
+            <h2 class="card-title">实时预测</h2>
+            <div class="prediction-list">
+                <div class="prediction-item"><div class="prediction-label">总分 / 35</div><div class="prediction-value" id="pred-total">21</div></div>
+                <div class="prediction-item"><div class="prediction-label">主要路径</div><div class="prediction-value" id="pred-path">内容路径</div></div>
+                <div class="prediction-item"><div class="prediction-label">预估阅读</div><div class="prediction-value" id="pred-reads">1000~2000</div></div>
+                <div class="prediction-item"><div class="prediction-label">推荐占比</div><div class="prediction-value" id="pred-rec">10~20%</div></div>
+                <div class="prediction-item"><div class="prediction-label">完读率</div><div class="prediction-value" id="pred-rate">45~55%</div></div>
+                <div class="prediction-item"><div class="prediction-label">留言数</div><div class="prediction-value" id="pred-comments">5~12</div></div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2 class="card-title">AI 预打分提示词</h2>
+            <textarea class="prompt-box" id="ai-prompt" readonly></textarea>
+            <div class="actions"><button class="btn" id="copy-prompt" type="button">复制提示词</button></div>
+            <p class="hint">可交给 AI 辅助预打分，再人工核对。此功能不自动发送草稿，也不消耗 API 额度。</p>
+        </section>
+    </div>
+</div>
+
+<section class="card">
+    <h2 class="card-title">预测记录与真实结果</h2>
+    {% if history %}
+    <table class="history-table">
+        <thead><tr><th>文章</th><th>评分</th><th>预测</th><th>真实结果</th><th>操作</th></tr></thead>
+        <tbody>
+        {% for item in history %}
+            <tr data-prediction-id="{{ item.id }}">
+                <td class="history-title">{{ item.title }}<br><span class="hint">{{ item.created_at }}</span></td>
+                <td>{{ item.total_score }} / 35<br><span class="hint">{{ item.path_type }}</span></td>
+                <td>阅读 {{ item.pred_reads }}<br>推荐 {{ item.pred_rec_pct }}<br>完读 {{ item.pred_read_rate }}<br>留言 {{ item.pred_comments }}</td>
+                <td>
+                    <div class="history-actuals">
+                        <input class="actual-input" data-field="actual_reads" type="number" min="0" value="{{ item.actual_reads if item.actual_reads is not none else '' }}" placeholder="阅读量">
+                        <input class="actual-input" data-field="actual_rec_pct" type="number" min="0" step="0.01" value="{{ item.actual_rec_pct if item.actual_rec_pct is not none else '' }}" placeholder="推荐占比%">
+                        <input class="actual-input" data-field="actual_read_rate" type="number" min="0" step="0.01" value="{{ item.actual_read_rate if item.actual_read_rate is not none else '' }}" placeholder="完读率%">
+                        <input class="actual-input" data-field="actual_comments" type="number" min="0" value="{{ item.actual_comments if item.actual_comments is not none else '' }}" placeholder="留言数">
+                    </div>
+                </td>
+                <td><button class="btn save-actuals" type="button">回填</button><span class="status"></span></td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty">还没有预测记录。完成评分后点击「保存预测」。</div>
+    {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const scoreInputs = [...document.querySelectorAll('[data-score]')];
+    const titleInput = document.getElementById('predict-title');
+    const draftInput = document.getElementById('predict-draft');
+    let predictions = {};
+
+    function readScores() {
+        return Object.fromEntries(scoreInputs.map(input => [input.dataset.score, Number(input.value)]));
+    }
+
+    function calculatePredictions() {
+        const scores = readScores();
+        const total = Object.values(scores).reduce((sum, value) => sum + value, 0);
+        const path = scores.a >= 4 ? '刚需路径' : (scores.d >= 4 ? '传播路径' : '内容路径');
+        const readsRange = total <= 14 ? '500~1000' : total <= 21 ? '1000~2000' : total <= 28 ? '2000~4000' : '4000~7000';
+        const recRange = total <= 14 ? '0~10%' : total <= 21 ? '10~20%' : total <= 28 ? '20~35%' : '35~50%';
+        const readRateRange = scores.e <= 2 ? '30~45%' : scores.e === 3 ? '45~55%' : '55~70%';
+        const commentsRange = scores.f <= 2 ? '0~5' : scores.f === 3 ? '5~12' : '12~25';
+        predictions = { total, path, readsRange, recRange, readRateRange, commentsRange };
+        document.getElementById('pred-total').textContent = total;
+        document.getElementById('pred-path').textContent = path;
+        document.getElementById('pred-reads').textContent = readsRange;
+        document.getElementById('pred-rec').textContent = recRange;
+        document.getElementById('pred-rate').textContent = readRateRange;
+        document.getElementById('pred-comments').textContent = commentsRange;
+    }
+
+    function updatePrompt() {
+        const title = titleInput.value.trim() || '（待填写）';
+        const draft = draftInput.value.trim() || '（待填写）';
+        document.getElementById('ai-prompt').value = `请作为公众号内容编辑，根据标题和草稿对以下七个维度分别打 1~5 分，并解释评分依据：\nA 选题需求\nB 标题吸引力\nC 内容价值\nD 传播潜力\nE 完读设计\nF 互动设计\nG 话题普适性\n\n标题：${title}\n草稿：${draft}\n\n请输出 JSON：{"a":3,"b":3,"c":3,"d":3,"e":3,"f":3,"g":3,"reason":"..."}`;
+    }
+
+    function setStatus(message, isError = false) {
+        const status = document.getElementById('predict-status');
+        status.textContent = message;
+        status.style.color = isError ? 'var(--danger)' : 'var(--accent)';
+    }
+
+    scoreInputs.forEach(input => input.addEventListener('change', calculatePredictions));
+    titleInput.addEventListener('input', updatePrompt);
+    draftInput.addEventListener('input', updatePrompt);
+
+    document.getElementById('copy-prompt').addEventListener('click', async () => {
+        await navigator.clipboard.writeText(document.getElementById('ai-prompt').value);
+        setStatus('提示词已复制');
+    });
+
+    document.getElementById('save-prediction').addEventListener('click', async () => {
+        if (!titleInput.value.trim()) {
+            setStatus('请先填写文章标题', true);
+            titleInput.focus();
+            return;
+        }
+        const metadata = [
+            document.getElementById('predict-source').value.trim() && `来源：${document.getElementById('predict-source').value.trim()}`,
+            document.getElementById('predict-date').value && `计划日期：${document.getElementById('predict-date').value}`,
+            document.getElementById('predict-time').value && `计划时间：${document.getElementById('predict-time').value}`,
+            document.getElementById('predict-notes').value.trim(),
+        ].filter(Boolean).join('\n');
+        try {
+            const response = await fetch('/api/predict/save', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({title: titleInput.value.trim(), scores: readScores(), predictions, notes: metadata}),
+            });
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.error || '保存失败');
+            setStatus(`预测 #${result.id} 已保存，正在刷新…`);
+            window.setTimeout(() => window.location.reload(), 400);
+        } catch (error) {
+            setStatus(error.message, true);
+        }
+    });
+
+    document.getElementById('send-calendar').addEventListener('click', () => {
+        const params = new URLSearchParams({
+            title: titleInput.value.trim(), draft: draftInput.value.trim(),
+            source: document.getElementById('predict-source').value.trim() || '预测页',
+            date: document.getElementById('predict-date').value,
+            time: document.getElementById('predict-time').value,
+        });
+        window.location.href = `/push-calendar?${params}`;
+    });
+
+    document.querySelectorAll('.save-actuals').forEach(button => button.addEventListener('click', async () => {
+        const row = button.closest('tr');
+        const payload = {};
+        row.querySelectorAll('[data-field]').forEach(input => {
+            payload[input.dataset.field] = input.value === '' ? null : Number(input.value);
+        });
+        try {
+            const response = await fetch(`/api/predict/${row.dataset.predictionId}/actuals`, {
+                method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload),
+            });
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error('回填失败');
+            const status = button.parentElement.querySelector('.status');
+            status.textContent = '已保存';
+        } catch (error) {
+            const status = button.parentElement.querySelector('.status');
+            status.textContent = error.message;
+            status.style.color = 'var(--danger)';
+        }
+    }));
+
+    calculatePredictions();
+    updatePrompt();
+</script>
+{% endblock %}
